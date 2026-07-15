@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowRight,
   CloudSun,
+  FlaskConical,
   LoaderCircle,
   Radar,
   ShieldCheck,
@@ -16,10 +17,18 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sampleCode } from '@/data/sample-code';
 import { createForecast } from '@/services/forecast-api';
+import { downloadForecastReport } from '@/utils/report-generator';
+
+const scenarioSuggestions = [
+  'Traffic grows 10×',
+  'The API becomes slow',
+  'The catalog reaches 100k items',
+];
 
 export default function App() {
   const [code, setCode] = useState(sampleCode);
   const [forecast, setForecast] = useState<EngineeringForecast | null>(null);
+  const [scenario, setScenario] = useState('Traffic grows 10×');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,7 +38,14 @@ export default function App() {
     document.querySelector('#workspace')?.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      setForecast(await createForecast({ code, language: 'typescript', framework: 'react' }));
+      setForecast(
+        await createForecast({
+          code,
+          language: 'typescript',
+          framework: 'react',
+          scenario: scenario.trim() || undefined,
+        }),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Unable to generate the forecast.');
     } finally {
@@ -136,8 +152,8 @@ export default function App() {
                   Can this code survive production?
                 </h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                  Edit the deliberately imperfect sample, then run a structured mock forecast
-                  through the real API contract.
+                  Edit the sample, choose a production scenario, and trace each forecast back to
+                  observable evidence in the code.
                 </p>
               </div>
               <Button onClick={runForecast} disabled={loading || code.trim().length < 20} size="lg">
@@ -149,6 +165,40 @@ export default function App() {
                 {loading ? 'Reading the signals…' : 'Forecast deployment'}
               </Button>
             </div>
+
+            <Card className="mb-5 p-4">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+                <div className="flex shrink-0 items-center gap-2 text-sm font-semibold text-white">
+                  <FlaskConical className="size-4 text-primary" /> What if…
+                </div>
+                <label className="sr-only" htmlFor="deployment-scenario">
+                  Deployment scenario
+                </label>
+                <input
+                  id="deployment-scenario"
+                  value={scenario}
+                  onChange={(event) => setScenario(event.target.value)}
+                  placeholder="e.g. traffic triples or the API becomes slow"
+                  className="h-10 min-w-0 flex-1 rounded-md border border-border bg-[#08100f] px-3 text-sm text-white outline-none placeholder:text-muted-foreground focus:border-primary/50 focus:ring-1 focus:ring-primary/40"
+                />
+                <div className="flex flex-wrap gap-2">
+                  {scenarioSuggestions.map((suggestion) => (
+                    <button
+                      key={suggestion}
+                      type="button"
+                      onClick={() => setScenario(suggestion)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                        scenario === suggestion
+                          ? 'border-primary/40 bg-primary/10 text-primary'
+                          : 'border-border text-muted-foreground hover:border-white/20 hover:text-white'
+                      }`}
+                    >
+                      {suggestion}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </Card>
 
             {error && (
               <div
@@ -162,7 +212,10 @@ export default function App() {
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,.95fr)]">
               <CodeEditorPlaceholder code={code} onChange={setCode} />
               {forecast ? (
-                <ForecastDashboard forecast={forecast} />
+                <ForecastDashboard
+                  forecast={forecast}
+                  onDownload={() => downloadForecastReport(forecast, code, scenario)}
+                />
               ) : (
                 <Card className="grid min-h-[480px] place-items-center border-dashed p-8 text-center">
                   <div className="max-w-xs">

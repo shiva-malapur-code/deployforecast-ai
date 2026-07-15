@@ -55,3 +55,5 @@ export interface ApiError {
   error: string;
   details?: unknown;
 }
+
+export { createDemoForecast } from './demo-forecast.js';

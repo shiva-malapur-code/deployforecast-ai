@@ -4,6 +4,15 @@ DeployForecast AI is an AI Engineering Forecast workflow that turns source-code 
 
 **Live demo:** [deployforecast-ai.s-malapur08.chatgpt.site](https://deployforecast-ai.s-malapur08.chatgpt.site)
 
+## Product workflow
+
+- Detects code-specific reliability, performance, accessibility, security, and maintainability signals
+- Converts signals into calibrated now, 7-day, 30-day, and 90-day risks
+- Runs custom “what-if” deployment scenarios such as traffic growth or dependency latency
+- Links every risk to evidence, potential impact, confidence, and a preventive action
+- Filters the forecast by category and timeline
+- Downloads a complete Markdown engineering report
+
 ## Quick start
 
 Requirements: Node.js 20+ and npm 10+.
