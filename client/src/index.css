@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+    --background: 164 38% 4%;
+    --foreground: 156 18% 93%;
+    --card: 165 28% 7%;
+    --card-foreground: 156 18% 93%;
+    --primary: 154 86% 68%;
+    --primary-foreground: 164 43% 6%;
+    --muted: 164 18% 13%;
+    --muted-foreground: 158 10% 58%;
+    --border: 164 17% 15%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply m-0 bg-background font-sans text-foreground antialiased;
+  }
+  button,
+  a,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+  ::selection {
+    @apply bg-primary/25 text-white;
+  }
+}
+
+@layer utilities {
+  .hero-grid {
+    background-image:
+      linear-gradient(to right, rgba(103, 245, 186, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(103, 245, 186, 0.045) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: linear-gradient(to bottom, black, transparent 88%);
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+}
