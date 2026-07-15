@@ -2,6 +2,8 @@
 
 DeployForecast AI is an AI Engineering Forecast workflow that turns source-code signals into a structured, time-based view of likely production risks and preventive actions.
 
+**Live demo:** [deployforecast-ai.s-malapur08.chatgpt.site](https://deployforecast-ai.s-malapur08.chatgpt.site)
+
 ## Quick start
 
 Requirements: Node.js 20+ and npm 10+.
@@ -31,6 +33,8 @@ ollama pull qwen2.5-coder:7b
 ```
 
 The provider interface keeps model-specific behavior out of routes and product logic.
+
+The hosted demo uses a deterministic public-demo provider so the workflow remains available without exposing credentials. Local development retains the Express-based Ollama integration for real model responses.
 
 ## Commands
 
