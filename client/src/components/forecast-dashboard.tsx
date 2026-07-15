@@ -51,6 +51,7 @@ export function ForecastDashboard({
 }) {
   const [category, setCategory] = useState<(typeof categories)[number]>('all');
   const [horizon, setHorizon] = useState<'all' | ForecastHorizon>('all');
+  const confidence = useMemo(() => getOverallConfidence(forecast), [forecast]);
   const filteredRisks = useMemo(
     () =>
       forecast.risks.filter(
@@ -63,26 +64,67 @@ export function ForecastDashboard({
 
   return (
     <div className="space-y-4" aria-live="polite">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Metric icon={Gauge} label="Application health" value={`${forecast.scores.health}%`} />
-        <Metric icon={ShieldAlert} label="Deployment risk" value={forecast.deploymentRisk} alert />
-        <Metric icon={Sparkles} label="Forecast engine" value={forecast.provider} />
-      </div>
-
-      <Card className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
-            Forecast summary
-          </p>
-          <Button
-            variant="ghost"
-            size="default"
-            onClick={onDownload}
-            className="-mr-2 -mt-2 h-8 px-2 text-xs"
-          >
+      <Card className="overflow-hidden shadow-glow">
+        <div className="flex items-center justify-between gap-4 border-b border-border bg-primary/[0.03] px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-8 place-items-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
+              <Gauge className="size-4" />
+            </span>
+            <div>
+              <h2 className="font-semibold text-white">Engineering Forecast</h2>
+              <p className="text-[11px] text-muted-foreground">Evidence-based deployment outlook</p>
+            </div>
+          </div>
+          <Button variant="ghost" size="default" onClick={onDownload} className="h-8 px-2 text-xs">
             <Download className="size-3.5" /> Report
           </Button>
         </div>
+
+        <div className="grid divide-y divide-border sm:grid-cols-[1.35fr_1fr_1fr] sm:divide-x sm:divide-y-0">
+          <div className="p-5">
+            <p className="text-xs font-medium text-muted-foreground">Application Health</p>
+            <div className="mt-2 flex items-baseline gap-1">
+              <span className="text-4xl font-bold tracking-tight text-white">
+                {forecast.scores.health}
+              </span>
+              <span className="text-sm text-muted-foreground">/100</span>
+            </div>
+            <HealthMeter value={forecast.scores.health} />
+          </div>
+
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ShieldAlert className="size-4" />
+              <p className="text-xs font-medium">Deployment Risk</p>
+            </div>
+            <span
+              className={cn(
+                'mt-4 inline-flex rounded-full border px-3 py-1.5 text-sm font-bold uppercase tracking-[0.12em]',
+                riskStyle[forecast.deploymentRisk],
+              )}
+            >
+              {forecast.deploymentRisk}
+            </span>
+          </div>
+
+          <div className="p-5">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Sparkles className="size-4" />
+              <p className="text-xs font-medium">Confidence</p>
+            </div>
+            <p className="mt-4 text-2xl font-bold capitalize text-white">{confidence}</p>
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Based on {forecast.signals.length} observable signal
+              {forecast.signals.length === 1 ? '' : 's'}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+          Forecast summary
+        </p>
         <p className="mt-3 text-sm leading-6 text-[#c6d3cf]">{forecast.summary}</p>
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs sm:grid-cols-4">
           <Score label="Reliability" value={forecast.scores.reliability} />
@@ -238,31 +280,39 @@ function Score({ label, value }: { label: string; value: number }) {
   );
 }
 
-function Metric({
-  icon: Icon,
-  label,
-  value,
-  alert = false,
-}: {
-  icon: typeof Gauge;
-  label: string;
-  value: string;
-  alert?: boolean;
-}) {
+function HealthMeter({ value }: { value: number }) {
+  const filledSegments = Math.round(value / 10);
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <Icon className="size-4" />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <p
-        className={cn(
-          'mt-3 truncate text-xl font-bold capitalize text-white',
-          alert && 'text-orange-300',
-        )}
-      >
-        {value}
-      </p>
-    </Card>
+    <div
+      className="mt-4 flex gap-1"
+      role="meter"
+      aria-label="Application health"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={value}
+    >
+      {Array.from({ length: 10 }, (_, index) => (
+        <span
+          key={index}
+          className={cn(
+            'h-2 flex-1 rounded-sm',
+            index < filledSegments ? 'bg-primary' : 'bg-white/[0.06]',
+          )}
+        />
+      ))}
+    </div>
   );
+}
+
+function getOverallConfidence(forecast: EngineeringForecast): 'low' | 'medium' | 'high' {
+  if (!forecast.risks.length) return 'medium';
+
+  const confidenceWeight = { low: 1, medium: 2, high: 3 } as const;
+  const average =
+    forecast.risks.reduce((total, risk) => total + confidenceWeight[risk.confidence], 0) /
+    forecast.risks.length;
+
+  if (average >= 2.4) return 'high';
+  if (average >= 1.5) return 'medium';
+  return 'low';
 }
