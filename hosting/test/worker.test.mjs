@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ApiErrorSchema, createDemoForecast, PreventiveFixSchema } from '@deploy-forecast/shared';
+import {
+  ApiErrorSchema,
+  createDemoForecast,
+  GeneratedTestsSchema,
+  PreventiveFixSchema,
+} from '@deploy-forecast/shared';
 import { createWorkerHandler } from '../../dist/server/index.js';
 
 const requestBody = {
@@ -98,6 +103,47 @@ test('rejects malformed preventive-fix provider output', async () => {
   });
   const response = await worker.fetch(
     new Request('https://example.test/api/preventive-fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...requestBody, forecast }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 502);
+  assert.equal(payload.code, 'INVALID_PROVIDER_RESPONSE');
+});
+
+test('serves validated generated tests from the dedicated endpoint', async () => {
+  const generatedRequest = {
+    ...requestBody,
+    code: 'export function Clear() { return <div onClick={() => clear()}>Clear</div>; }',
+  };
+  const forecast = createDemoForecast(generatedRequest, 'test');
+  const worker = createWorkerHandler();
+  const response = await worker.fetch(
+    new Request('https://example.test/api/generated-tests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...generatedRequest, forecast }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(GeneratedTestsSchema.safeParse(payload).success, true);
+  assert.match(payload.testCode, /@testing-library\/react/);
+});
+
+test('rejects malformed generated-test provider output', async () => {
+  const forecast = createDemoForecast(requestBody, 'test');
+  const worker = createWorkerHandler(undefined, {
+    generatedTestsFactory: async () => ({ testFramework: 'jest', testCode: 'test()' }),
+  });
+  const response = await worker.fetch(
+    new Request('https://example.test/api/generated-tests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...requestBody, forecast }),

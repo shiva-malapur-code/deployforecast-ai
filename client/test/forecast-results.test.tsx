@@ -27,6 +27,7 @@ test('renders a separate Improved Code tab without generating a fix automaticall
   );
 
   assert.match(markup, /Improved Code/);
+  assert.match(markup, /Generated Tests/);
   assert.match(markup, /aria-selected="false"/);
   assert.doesNotMatch(markup, /Original and improved React code comparison/);
 });

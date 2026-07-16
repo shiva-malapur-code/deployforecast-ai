@@ -1,6 +1,8 @@
 import type {
   EngineeringForecast,
   ForecastRequest,
+  GeneratedTests,
+  GeneratedTestsRequest,
   PreventiveFix,
   PreventiveFixRequest,
 } from '@deploy-forecast/shared';
@@ -29,6 +31,14 @@ export async function executeProviderPreventiveFix(
     (signal) => provider.generatePreventiveFix(input, signal),
     options,
   );
+}
+
+export async function executeProviderGeneratedTests(
+  provider: AIProvider,
+  input: GeneratedTestsRequest,
+  options: ProviderExecutionOptions,
+): Promise<GeneratedTests> {
+  return executeProviderOperation((signal) => provider.generateTests(input, signal), options);
 }
 
 async function executeProviderOperation<T>(

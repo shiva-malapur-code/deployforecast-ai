@@ -1,5 +1,6 @@
 export { createDemoForecast } from './demo-forecast.js';
 export { createDemoPreventiveFix } from './demo-preventive-fix.js';
+export { createDemoGeneratedTests } from './demo-generated-tests.js';
 export {
   API_ERROR_DEFINITIONS,
   ApiErrorCodeSchema,
@@ -12,12 +13,16 @@ export {
   ForecastRiskSchema,
   ForecastScoresSchema,
   ForecastSignalSchema,
+  GeneratedTestsRequestSchema,
+  GeneratedTestsSchema,
+  GeneratedTestStrategySchema,
   PreventiveFixChangeSchema,
   PreventiveFixRequestSchema,
   PreventiveFixSchema,
   RiskCategorySchema,
   RiskLevelSchema,
   validatePreventiveFixEvidence,
+  validateGeneratedTestEvidence,
 } from './schemas.js';
 export type {
   ApiError,
@@ -29,6 +34,9 @@ export type {
   ForecastRisk,
   ForecastScores,
   ForecastSignal,
+  GeneratedTests,
+  GeneratedTestsRequest,
+  GeneratedTestStrategy,
   PreventiveFix,
   PreventiveFixChange,
   PreventiveFixRequest,

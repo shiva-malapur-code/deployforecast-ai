@@ -1,8 +1,12 @@
 import {
   EngineeringForecastSchema,
+  GeneratedTestsSchema,
   PreventiveFixSchema,
+  validateGeneratedTestEvidence,
   validatePreventiveFixEvidence,
   type EngineeringForecast,
+  type GeneratedTests,
+  type GeneratedTestsRequest,
   type PreventiveFix,
   type PreventiveFixRequest,
 } from '@deploy-forecast/shared';
@@ -33,6 +37,18 @@ export function parseProviderForecast(value: unknown, provider: string): Enginee
   const result = EngineeringForecastSchema.safeParse(value);
   if (!result.success) {
     throw new ProviderOutputError(provider, { cause: result.error });
+  }
+  return result.data;
+}
+
+export function parseProviderGeneratedTests(
+  value: unknown,
+  provider: string,
+  input: GeneratedTestsRequest,
+): GeneratedTests {
+  const result = GeneratedTestsSchema.safeParse(value);
+  if (!result.success || !validateGeneratedTestEvidence(result.data, input)) {
+    throw new ProviderOutputError(provider, { cause: result.success ? undefined : result.error });
   }
   return result.data;
 }

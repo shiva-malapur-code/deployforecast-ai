@@ -1,11 +1,17 @@
 import {
   createDemoForecast,
+  createDemoGeneratedTests,
   createDemoPreventiveFix,
   type ForecastRequest,
+  type GeneratedTestsRequest,
   type PreventiveFixRequest,
 } from '@deploy-forecast/shared';
 import type { AIProvider } from './ai-provider.js';
-import { parseProviderForecast, parseProviderPreventiveFix } from './provider-output.js';
+import {
+  parseProviderForecast,
+  parseProviderGeneratedTests,
+  parseProviderPreventiveFix,
+} from './provider-output.js';
 
 export class MockProvider implements AIProvider {
   readonly name = 'mock';
@@ -18,6 +24,15 @@ export class MockProvider implements AIProvider {
   async generatePreventiveFix(input: PreventiveFixRequest, signal?: AbortSignal) {
     await abortableDelay(500, signal);
     return parseProviderPreventiveFix(createDemoPreventiveFix(input, this.name), this.name, input);
+  }
+
+  async generateTests(input: GeneratedTestsRequest, signal?: AbortSignal) {
+    await abortableDelay(500, signal);
+    return parseProviderGeneratedTests(
+      createDemoGeneratedTests(input, this.name),
+      this.name,
+      input,
+    );
   }
 }
 

@@ -105,6 +105,50 @@ export function validatePreventiveFixEvidence(
   });
 }
 
+export const GeneratedTestsRequestSchema = z.object({
+  code: ForecastRequestSchema.shape.code,
+  language: ForecastRequestSchema.shape.language,
+  framework: ForecastRequestSchema.shape.framework,
+  forecast: EngineeringForecastSchema,
+});
+
+export const GeneratedTestStrategySchema = z.object({
+  riskId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1),
+  title: z.string().min(1),
+  cases: z.array(z.string().min(1)).min(1),
+});
+
+export const GeneratedTestsSchema = z.object({
+  id: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  provider: z.string().min(1),
+  testFramework: z.literal('vitest'),
+  testingLibrary: z.literal('@testing-library/react'),
+  testCode: z.string().max(100_000),
+  summary: z.string().min(1),
+  assumptions: z.array(z.string().min(1)).min(1),
+  strategies: z.array(GeneratedTestStrategySchema),
+  reviewWarning: z.string().min(1),
+});
+
+export function validateGeneratedTestEvidence(
+  tests: z.infer<typeof GeneratedTestsSchema>,
+  input: z.infer<typeof GeneratedTestsRequestSchema>,
+): boolean {
+  return tests.strategies.every((strategy) => {
+    const risk = input.forecast.risks.find((item) => item.id === strategy.riskId);
+    return (
+      risk !== undefined &&
+      strategy.signalIds.every(
+        (signalId) =>
+          risk.signalIds.includes(signalId) &&
+          input.forecast.signals.some((signal) => signal.id === signalId),
+      )
+    );
+  });
+}
+
 export const ApiErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
   'RATE_LIMITED',
@@ -197,5 +241,8 @@ export type EngineeringForecast = z.infer<typeof EngineeringForecastSchema>;
 export type PreventiveFixRequest = z.infer<typeof PreventiveFixRequestSchema>;
 export type PreventiveFixChange = z.infer<typeof PreventiveFixChangeSchema>;
 export type PreventiveFix = z.infer<typeof PreventiveFixSchema>;
+export type GeneratedTestsRequest = z.infer<typeof GeneratedTestsRequestSchema>;
+export type GeneratedTestStrategy = z.infer<typeof GeneratedTestStrategySchema>;
+export type GeneratedTests = z.infer<typeof GeneratedTestsSchema>;
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 export type ApiError = z.infer<typeof ApiErrorSchema>;

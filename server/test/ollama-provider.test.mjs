@@ -32,3 +32,17 @@ test('rejects invalid preventive-fix provider output', async () => {
     { name: 'ProviderOutputError' },
   );
 });
+
+test('rejects malformed generated-test provider output', async () => {
+  const provider = new OllamaProvider(async () =>
+    Response.json({ response: JSON.stringify({ testFramework: 'jest', testCode: 'test()' }) }),
+  );
+
+  await assert.rejects(
+    provider.generateTests({
+      ...request,
+      forecast: createDemoForecast(request, 'test'),
+    }),
+    { name: 'ProviderOutputError' },
+  );
+});

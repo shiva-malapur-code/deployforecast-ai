@@ -4,11 +4,14 @@ import {
   ApiErrorSchema,
   createApiError,
   createDemoForecast,
+  createDemoGeneratedTests,
   createDemoPreventiveFix,
   EngineeringForecastSchema,
   ForecastRequestSchema,
+  GeneratedTestsSchema,
   PreventiveFixSchema,
   validatePreventiveFixEvidence,
+  validateGeneratedTestEvidence,
 } from '../dist/index.js';
 
 const validRequest = {
@@ -79,4 +82,18 @@ test('creates an evidence-linked preventive fix while preserving original code',
   assert.equal(fix.originalCode, request.code);
   assert.notEqual(fix.improvedCode, request.code);
   assert.equal(validatePreventiveFixEvidence(fix, input), true);
+});
+
+test('creates a validated generated test suite linked to forecast evidence', () => {
+  const request = {
+    ...validRequest,
+    code: 'export function Clear() { return <div onClick={() => clear()}>Clear</div>; }',
+  };
+  const input = { ...request, forecast: createDemoForecast(request, 'test') };
+  const generated = createDemoGeneratedTests(input, 'test');
+
+  assert.equal(GeneratedTestsSchema.safeParse(generated).success, true);
+  assert.match(generated.testCode, /from 'vitest'/);
+  assert.match(generated.testCode, /from '@testing-library\/react'/);
+  assert.equal(validateGeneratedTestEvidence(generated, input), true);
 });

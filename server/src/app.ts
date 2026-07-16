@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { mapApiError } from './errors.js';
 import { createRateLimiter, requestIdMiddleware } from './request-middleware.js';
 import { forecastRouter } from './routes/forecast.js';
+import { generatedTestsRouter } from './routes/generated-tests.js';
 import { preventiveFixRouter } from './routes/preventive-fix.js';
 
 export const app = express();
@@ -27,6 +28,11 @@ app.use(
   '/api/preventive-fix',
   createRateLimiter(config.RATE_LIMIT_WINDOW_MS, config.RATE_LIMIT_MAX),
   preventiveFixRouter,
+);
+app.use(
+  '/api/generated-tests',
+  createRateLimiter(config.RATE_LIMIT_WINDOW_MS, config.RATE_LIMIT_MAX),
+  generatedTestsRouter,
 );
 
 app.use((_request, response) => {

@@ -5,12 +5,14 @@ import {
   Clipboard,
   CodeXml,
   Download,
+  FlaskConical,
   LoaderCircle,
   ShieldCheck,
   TriangleAlert,
   WandSparkles,
 } from 'lucide-react';
 import { ForecastDashboard } from '@/components/forecast-dashboard';
+import { GeneratedTestsPanel } from '@/components/generated-tests-panel';
 import { MonacoDiffEditor } from '@/components/monaco-diff-editor';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,7 +28,7 @@ export function ForecastResults({
   submission: ForecastSubmission;
   onDownloadReport: () => void;
 }) {
-  const [tab, setTab] = useState<'forecast' | 'improved'>('forecast');
+  const [tab, setTab] = useState<'forecast' | 'improved' | 'tests'>('forecast');
   const [fix, setFix] = useState<PreventiveFix | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,7 +69,7 @@ export function ForecastResults({
   return (
     <div className="min-w-0 space-y-4">
       <div
-        className="flex rounded-lg border border-border bg-card p-1"
+        className="flex flex-wrap rounded-lg border border-border bg-card p-1"
         role="tablist"
         aria-label="Forecast results"
       >
@@ -77,11 +79,14 @@ export function ForecastResults({
         <ResultTab active={tab === 'improved'} onClick={() => setTab('improved')}>
           <CodeXml className="size-4" /> Improved Code
         </ResultTab>
+        <ResultTab active={tab === 'tests'} onClick={() => setTab('tests')}>
+          <FlaskConical className="size-4" /> Generated Tests
+        </ResultTab>
       </div>
 
       {tab === 'forecast' ? (
         <ForecastDashboard forecast={submission.forecast} onDownload={onDownloadReport} />
-      ) : (
+      ) : tab === 'improved' ? (
         <ImprovedCodePanel
           fix={fix}
           language={submission.request.language}
@@ -89,6 +94,8 @@ export function ForecastResults({
           error={error}
           onGenerate={() => void generateFix()}
         />
+      ) : (
+        <GeneratedTestsPanel submission={submission} />
       )}
     </div>
   );
@@ -227,7 +234,7 @@ function ResultTab({
       role="tab"
       aria-selected={active}
       onClick={onClick}
-      className={`flex flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
+      className={`flex min-w-[8.5rem] flex-1 items-center justify-center gap-2 rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
         active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-white'
       }`}
     >
