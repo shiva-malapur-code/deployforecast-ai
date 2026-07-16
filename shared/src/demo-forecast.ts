@@ -2,10 +2,13 @@ import type {
   EngineeringForecast,
   ForecastRequest,
   ForecastRisk,
+  ForecastSnapshot,
   ForecastSignal,
   RiskCategory,
   RiskLevel,
-} from './index.js';
+  ScenarioForecast,
+} from './schemas.js';
+import { compareForecastRisks } from './scenario-comparison.js';
 
 type Finding = {
   signal: Omit<ForecastSignal, 'line'> & { index: number };
@@ -402,94 +405,6 @@ function inspectCode(code: string): Finding[] {
   return findings;
 }
 
-function scenarioFinding(scenario: string, code: string): Finding | null {
-  const normalized = scenario.toLowerCase();
-  if (!normalized.trim()) return null;
-
-  if (/(traffic|users|scale|triple|10x|million)/.test(normalized)) {
-    return finding(
-      'scenario-scale',
-      'Growth scenario selected',
-      `What-if scenario: “${scenario}”`,
-      Math.max(0, code.indexOf('fetch(')),
-      {
-        title: 'Current request behavior may amplify traffic growth',
-        summary:
-          'The selected growth scenario increases the cost of every unbounded or duplicate client request.',
-        category: 'performance',
-        level: code.includes('fetch(') ? 'high' : 'medium',
-        horizon: '30-days',
-        confidence: 'medium',
-        impact: 'Latency and infrastructure pressure may grow faster than the active-user count.',
-        recommendation:
-          'Load-test the critical path, cache repeatable reads, and add request-level observability before launch.',
-      },
-    );
-  }
-
-  if (/(slow|latency|offline|failure|timeout|unavailable)/.test(normalized)) {
-    return finding(
-      'scenario-latency',
-      'Dependency degradation scenario selected',
-      `What-if scenario: “${scenario}”`,
-      Math.max(0, code.indexOf('fetch(')),
-      {
-        title: 'Slow dependencies may trap the interface in an ambiguous state',
-        summary:
-          'The scenario exposes missing timeout, cancellation, retry, or stale-response behavior.',
-        category: 'reliability',
-        level: 'high',
-        horizon: '7-days',
-        confidence: 'medium',
-        impact:
-          'Users may repeat actions or abandon the workflow while requests remain unresolved.',
-        recommendation:
-          'Add timeouts, cancellation, bounded retries, and a clear recoverable error state.',
-      },
-    );
-  }
-
-  if (/(catalog|items|products|records|large list|100k|100,000)/.test(normalized)) {
-    return finding(
-      'scenario-volume',
-      'Large data-volume scenario selected',
-      `What-if scenario: “${scenario}”`,
-      Math.max(0, code.indexOf('.map(')),
-      {
-        title: 'Rendering cost may grow with the full dataset',
-        summary:
-          'The selected volume scenario can expose list rendering, payload size, and pagination assumptions.',
-        category: 'performance',
-        level: code.includes('.map(') ? 'high' : 'medium',
-        horizon: '30-days',
-        confidence: 'medium',
-        impact: 'Interaction latency and memory pressure may rise as result counts grow.',
-        recommendation:
-          'Add server pagination, measure payload size, and virtualize only when profiling confirms a large rendered list.',
-      },
-    );
-  }
-
-  return finding(
-    'scenario-change',
-    'Custom deployment scenario selected',
-    `What-if scenario: “${scenario}”`,
-    0,
-    {
-      title: 'The proposed change needs a targeted production check',
-      summary:
-        'The scenario introduces assumptions that static source inspection cannot verify alone.',
-      category: 'maintainability',
-      level: 'medium',
-      horizon: '30-days',
-      confidence: 'low',
-      impact: 'Unmeasured behavior may surface only after the change reaches real traffic.',
-      recommendation:
-        'Define one measurable success signal and validate the scenario in a production-like test.',
-    },
-  );
-}
-
 function scoreCategory(risks: ForecastRisk[], category: RiskCategory): number {
   const penalty = risks
     .filter((risk) => risk.category === category)
@@ -497,20 +412,33 @@ function scoreCategory(risks: ForecastRisk[], category: RiskCategory): number {
   return Math.max(28, 100 - penalty);
 }
 
-export function createDemoForecast(input: ForecastRequest, provider: string): EngineeringForecast {
-  const findings = inspectCode(input.code);
-  const scenario = scenarioFinding(input.scenario ?? '', input.code);
-  if (scenario) findings.push(scenario);
+const disclaimer =
+  'Forecasts are evidence-based risk assessments, not guarantees. Validate them with runtime telemetry, accessibility testing, and load testing.';
 
+function createBaselineSnapshot(code: string): ForecastSnapshot {
+  const findings = inspectCode(code);
   const signals: ForecastSignal[] = findings.map(({ signal }) => ({
     id: signal.id,
     title: signal.title,
     evidence: signal.evidence,
-    line: lineOf(input.code, signal.index),
+    line: lineOf(code, signal.index),
   }));
-  const risks = findings
-    .map(({ risk }) => risk)
-    .sort((a, b) => severityRank[b.level] - severityRank[a.level]);
+  const risks = findings.map(({ risk }) => risk);
+  const summary = risks.length
+    ? `${signals.length} observable code signals produced ${risks.length} calibrated production risks.`
+    : 'No high-confidence production risks were detected by the current inspection rules. Runtime validation is still recommended.';
+
+  return createSnapshot(signals, risks, summary);
+}
+
+function createSnapshot(
+  signals: ForecastSignal[],
+  unsortedRisks: ForecastRisk[],
+  summary: string,
+): ForecastSnapshot {
+  const risks = [...unsortedRisks].sort(
+    (left, right) => severityRank[right.level] - severityRank[left.level],
+  );
   const reliability = scoreCategory(risks, 'reliability');
   const performance = scoreCategory(risks, 'performance');
   const accessibility = scoreCategory(risks, 'accessibility');
@@ -527,23 +455,230 @@ export function createDemoForecast(input: ForecastRequest, provider: string): En
     critical: 59,
   };
   const health = Math.min(rawHealth, healthCeiling[deploymentRisk]);
-  const scenarioSummary = input.scenario
-    ? ` Under the “${input.scenario}” scenario, one additional assumption was evaluated.`
-    : '';
 
   return {
-    id: crypto.randomUUID(),
-    generatedAt: new Date().toISOString(),
-    provider,
-    summary: risks.length
-      ? `${signals.length} observable code signals produced ${risks.length} calibrated production risks.${scenarioSummary}`
-      : 'No high-confidence production risks were detected by the current inspection rules. Runtime validation is still recommended.',
+    summary,
     deploymentRisk,
     scores: { health, reliability, performance, accessibility, security, maintainability },
     signals,
     risks,
     preventionPlan: [...new Set(risks.map((risk) => risk.recommendation))].slice(0, 5),
-    disclaimer:
-      'Forecasts are evidence-based risk assessments, not guarantees. Validate them with runtime telemetry, accessibility testing, and load testing.',
+    disclaimer,
+  };
+}
+
+function scenarioSignal(id: string, title: string, scenario: string): ForecastSignal {
+  return {
+    id: `signal-${id}`,
+    title,
+    evidence: `User-supplied scenario: “${scenario}”`,
+  };
+}
+
+function scenarioRisk(
+  id: string,
+  signalId: string,
+  risk: Omit<ForecastRisk, 'id' | 'signalIds'>,
+): ForecastRisk {
+  return { ...risk, id: `risk-${id}`, signalIds: [signalId] };
+}
+
+function nextSeverity(level: RiskLevel): RiskLevel {
+  const next: Record<RiskLevel, RiskLevel> = {
+    low: 'medium',
+    medium: 'high',
+    high: 'critical',
+    critical: 'critical',
+  };
+  return next[level];
+}
+
+function previousSeverity(level: RiskLevel): RiskLevel {
+  const previous: Record<RiskLevel, RiskLevel> = {
+    low: 'low',
+    medium: 'low',
+    high: 'medium',
+    critical: 'high',
+  };
+  return previous[level];
+}
+
+function createScenarioForecast(
+  scenario: string,
+  code: string,
+  baseline: ForecastSnapshot,
+): { snapshot: ForecastSnapshot; details: ScenarioForecast } {
+  const normalized = scenario.toLowerCase();
+  const signals = baseline.signals.map((signal) => ({ ...signal }));
+  let risks = baseline.risks.map((risk) => ({ ...risk, signalIds: [...risk.signalIds] }));
+  const assumptions = [
+    'The submitted source and baseline forecast remain unchanged; only the user-supplied scenario varies.',
+  ];
+  const limitations = [
+    'Static source inspection cannot verify actual production load, dependency latency, user behavior, or infrastructure capacity.',
+    'Severity changes are directional risk assessments, not measured probabilities or benchmark results.',
+    'No exact traffic, revenue, latency, or performance values are inferred beyond values explicitly supplied in the scenario.',
+  ];
+  let matchedFactor = false;
+
+  const addSignal = (signal: ForecastSignal) => {
+    if (!signals.some((item) => item.id === signal.id)) signals.push(signal);
+  };
+  const addRisk = (risk: ForecastRisk) => {
+    if (!risks.some((item) => item.id === risk.id)) risks.push(risk);
+  };
+  const changeRisks = (
+    matches: (risk: ForecastRisk) => boolean,
+    changeLevel: (level: RiskLevel) => RiskLevel,
+    signalId: string,
+  ) => {
+    risks = risks.map((risk) =>
+      matches(risk)
+        ? {
+            ...risk,
+            level: changeLevel(risk.level),
+            confidence: risk.confidence === 'low' ? 'low' : 'medium',
+            signalIds: [...new Set([...risk.signalIds, signalId])],
+          }
+        : risk,
+    );
+  };
+
+  if (/(traffic|users|scale|triple|10x|million)/.test(normalized)) {
+    matchedFactor = true;
+    const signal = scenarioSignal('scenario-scale', 'Growth scenario selected', scenario);
+    addSignal(signal);
+    addRisk(
+      scenarioRisk('scenario-scale', signal.id, {
+        title: 'Current request behavior may amplify traffic growth',
+        summary:
+          'The growth scenario increases the operational cost of unbounded or duplicate client requests.',
+        category: 'performance',
+        level: code.includes('fetch(') ? 'high' : 'medium',
+        horizon: '30-days',
+        confidence: 'medium',
+        impact:
+          'Latency and infrastructure pressure may grow as more users exercise the same path.',
+        recommendation:
+          'Load-test the critical path, cache repeatable reads, and add request-level observability before launch.',
+      }),
+    );
+    assumptions.push(
+      'The growth scenario exercises the same client request paths shown in the source.',
+    );
+  }
+
+  if (/(slow|latency|offline|failure|unavailable)/.test(normalized)) {
+    matchedFactor = true;
+    const signal = scenarioSignal(
+      'scenario-latency',
+      'Dependency degradation scenario selected',
+      scenario,
+    );
+    addSignal(signal);
+    addRisk(
+      scenarioRisk('scenario-latency', signal.id, {
+        title: 'Slow dependencies may trap the interface in an ambiguous state',
+        summary:
+          'The scenario exposes missing timeout, cancellation, retry, or stale-response behavior.',
+        category: 'reliability',
+        level: 'high',
+        horizon: '7-days',
+        confidence: 'medium',
+        impact:
+          'Users may repeat actions or abandon the workflow while requests remain unresolved.',
+        recommendation:
+          'Add timeouts, cancellation, bounded retries, and a clear recoverable error state.',
+      }),
+    );
+    changeRisks((risk) => risk.id.startsWith('risk-fetch-errors'), nextSeverity, signal.id);
+    assumptions.push(
+      'The degraded dependency affects fetch calls visible in the submitted component.',
+    );
+  }
+
+  if (/(catalog|items|products|records|large list|100k|100,000)/.test(normalized)) {
+    matchedFactor = true;
+    const signal = scenarioSignal(
+      'scenario-volume',
+      'Large data-volume scenario selected',
+      scenario,
+    );
+    addSignal(signal);
+    addRisk(
+      scenarioRisk('scenario-volume', signal.id, {
+        title: 'Rendering cost may grow with the full dataset',
+        summary:
+          'The data-volume scenario can expose list rendering, payload size, and pagination assumptions.',
+        category: 'performance',
+        level: code.includes('.map(') ? 'high' : 'medium',
+        horizon: '30-days',
+        confidence: 'medium',
+        impact: 'Interaction latency and memory pressure may rise as result counts grow.',
+        recommendation:
+          'Add server pagination, measure payload size, and virtualize only when profiling confirms a large rendered list.',
+      }),
+    );
+    changeRisks((risk) => risk.id === 'risk-unstable-key', nextSeverity, signal.id);
+    assumptions.push('The larger dataset reaches the list-rendering path visible in the source.');
+  }
+
+  const positiveChange = /(add|enable|introduc|implement|adopt|with|use)/.test(normalized);
+  if (positiveChange && /(retry|retries|error state|fallback|cancell)/.test(normalized)) {
+    matchedFactor = true;
+    const signal = scenarioSignal(
+      'scenario-resilience',
+      'Resilience mitigation scenario selected',
+      scenario,
+    );
+    addSignal(signal);
+    changeRisks((risk) => risk.id.startsWith('risk-fetch-errors'), previousSeverity, signal.id);
+    assumptions.push('The stated resilience behavior is implemented on the affected request path.');
+  }
+
+  if (!matchedFactor) {
+    assumptions.push(
+      'The scenario does not map to a supported deterministic mock factor, so baseline risk severities are held constant.',
+    );
+  }
+
+  let snapshot = createSnapshot(signals, risks, 'Scenario forecast pending comparison.');
+  const comparisons = compareForecastRisks(baseline.risks, snapshot.risks);
+  const totals = comparisons.reduce(
+    (counts, comparison) => ({ ...counts, [comparison.status]: counts[comparison.status] + 1 }),
+    { new: 0, increased: 0, decreased: 0, unchanged: 0 },
+  );
+  snapshot = {
+    ...snapshot,
+    summary: `Scenario forecast for “${scenario}”: ${totals.new} new, ${totals.increased} increased, ${totals.decreased} decreased, and ${totals.unchanged} unchanged risks compared with baseline.`,
+  };
+
+  return {
+    snapshot,
+    details: {
+      label: 'Scenario forecast',
+      input: scenario,
+      comparisonMethod: 'normalized-title-category',
+      baseline,
+      comparisons,
+      assumptions,
+      limitations,
+    },
+  };
+}
+
+export function createDemoForecast(input: ForecastRequest, provider: string): EngineeringForecast {
+  const baseline = createBaselineSnapshot(input.code);
+  const scenarioInput = input.scenario?.trim();
+  const scenario = scenarioInput
+    ? createScenarioForecast(scenarioInput, input.code, baseline)
+    : undefined;
+
+  return {
+    id: crypto.randomUUID(),
+    generatedAt: new Date().toISOString(),
+    provider,
+    ...(scenario?.snapshot ?? baseline),
+    scenario: scenario?.details,
   };
 }

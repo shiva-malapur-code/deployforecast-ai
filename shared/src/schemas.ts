@@ -49,10 +49,7 @@ export const ForecastScoresSchema = z.object({
   maintainability: ScoreSchema,
 });
 
-export const EngineeringForecastSchema = z.object({
-  id: z.string().min(1),
-  generatedAt: z.string().datetime(),
-  provider: z.string().min(1),
+export const ForecastSnapshotSchema = z.object({
   summary: z.string().min(1),
   deploymentRisk: RiskLevelSchema,
   scores: ForecastScoresSchema,
@@ -60,6 +57,43 @@ export const EngineeringForecastSchema = z.object({
   risks: z.array(ForecastRiskSchema),
   preventionPlan: z.array(z.string().min(1)),
   disclaimer: z.string().min(1),
+});
+
+export const ScenarioComparisonStatusSchema = z.enum([
+  'new',
+  'increased',
+  'decreased',
+  'unchanged',
+]);
+
+export const ScenarioRiskComparisonSchema = z.object({
+  key: z.string().min(1),
+  status: ScenarioComparisonStatusSchema,
+  category: RiskCategorySchema,
+  title: z.string().min(1),
+  baselineRiskId: z.string().min(1).optional(),
+  scenarioRiskId: z.string().min(1),
+  baselineLevel: RiskLevelSchema.optional(),
+  scenarioLevel: RiskLevelSchema,
+  confidence: ForecastConfidenceSchema,
+  signalIds: z.array(z.string().min(1)),
+});
+
+export const ScenarioForecastSchema = z.object({
+  label: z.literal('Scenario forecast'),
+  input: ForecastRequestSchema.shape.scenario.unwrap().min(1),
+  comparisonMethod: z.literal('normalized-title-category'),
+  baseline: ForecastSnapshotSchema,
+  comparisons: z.array(ScenarioRiskComparisonSchema),
+  assumptions: z.array(z.string().min(1)).min(1),
+  limitations: z.array(z.string().min(1)).min(1),
+});
+
+export const EngineeringForecastSchema = ForecastSnapshotSchema.extend({
+  id: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  provider: z.string().min(1),
+  scenario: ScenarioForecastSchema.optional(),
 });
 
 export const PreventiveFixRequestSchema = z.object({
@@ -237,6 +271,10 @@ export type ForecastRequest = z.infer<typeof ForecastRequestSchema>;
 export type ForecastSignal = z.infer<typeof ForecastSignalSchema>;
 export type ForecastRisk = z.infer<typeof ForecastRiskSchema>;
 export type ForecastScores = z.infer<typeof ForecastScoresSchema>;
+export type ForecastSnapshot = z.infer<typeof ForecastSnapshotSchema>;
+export type ScenarioComparisonStatus = z.infer<typeof ScenarioComparisonStatusSchema>;
+export type ScenarioRiskComparison = z.infer<typeof ScenarioRiskComparisonSchema>;
+export type ScenarioForecast = z.infer<typeof ScenarioForecastSchema>;
 export type EngineeringForecast = z.infer<typeof EngineeringForecastSchema>;
 export type PreventiveFixRequest = z.infer<typeof PreventiveFixRequestSchema>;
 export type PreventiveFixChange = z.infer<typeof PreventiveFixChangeSchema>;

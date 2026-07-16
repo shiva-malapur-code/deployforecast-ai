@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createDemoForecast } from '@deploy-forecast/shared';
 import { createForecast, ForecastApiError } from '../src/services/forecast-api.ts';
 
 const request = {
@@ -42,4 +43,18 @@ test('aborts an in-flight forecast request', async () => {
     assert.equal((error as Error).name, 'AbortError');
     return true;
   });
+});
+
+test('rejects a successful response that omits the requested scenario comparison', async () => {
+  const scenarioRequest = { ...request, scenario: 'The API becomes slow' };
+  const baselineOnly = createDemoForecast(request, 'test');
+
+  await assert.rejects(
+    createForecast(scenarioRequest, {
+      fetchImpl: async () => Response.json(baselineOnly),
+    }),
+    {
+      message: 'The forecast service returned an invalid scenario comparison. Please try again.',
+    },
+  );
 });

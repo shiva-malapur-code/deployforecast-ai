@@ -34,6 +34,34 @@ export function createForecastReport(
       return `## ${index + 1}. ${risk.title}\n\n- Severity: ${risk.level}\n- Horizon: ${risk.horizon}\n- Category: ${risk.category}\n- Confidence: ${risk.confidence}\n\n${risk.summary}\n\n**Evidence**\n${evidence || '  - Scenario-based assumption'}\n\n**Potential impact:** ${risk.impact}\n\n**Preventive action:** ${risk.recommendation}`;
     })
     .join('\n\n');
+  const scenarioComparison = forecast.scenario
+    ? `## Scenario forecast comparison
+
+Label: ${forecast.scenario.label}
+Method: normalized title plus category matching
+
+${forecast.scenario.comparisons
+  .map(
+    (comparison) =>
+      `- **${comparison.title}** (${comparison.category}): ${comparison.baselineLevel ?? 'not present'} → ${comparison.scenarioLevel} — ${comparison.status}, ${comparison.confidence} confidence`,
+  )
+  .join('\n')}
+
+### Assumptions
+
+${forecast.scenario.assumptions.map((assumption) => `- ${assumption}`).join('\n')}
+
+### Limitations
+
+${forecast.scenario.limitations.map((limitation) => `- ${limitation}`).join('\n')}
+
+### Preserved baseline
+
+- Health: ${forecast.scenario.baseline.scores.health}/100
+- Deployment risk: ${forecast.scenario.baseline.deploymentRisk}
+- Risks: ${forecast.scenario.baseline.risks.length}
+`
+    : '';
 
   return `# DeployForecast AI Engineering Forecast
 
@@ -49,6 +77,8 @@ ${forecast.summary}
 ## Engineering scores
 
 ${scores}
+
+${scenarioComparison}
 
 ${risks || '## Risks\n\nNo risks matched the current inspection rules.'}
 

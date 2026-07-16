@@ -27,7 +27,7 @@ export class OllamaProvider implements AIProvider {
         ? { ...decoded, provider: this.name, generatedAt: new Date().toISOString() }
         : decoded;
 
-    return parseProviderForecast(forecast, this.name);
+    return parseProviderForecast(forecast, this.name, input);
   }
 
   async generatePreventiveFix(input: PreventiveFixRequest, signal?: AbortSignal) {
@@ -91,7 +91,7 @@ export class OllamaProvider implements AIProvider {
   }
 
   private buildForecastPrompt(input: ForecastRequest): string {
-    return `You are a senior React reliability engineer. Analyze observable code signals and return one JSON object matching the EngineeringForecast contract. Describe plausible risks using calibrated words such as may or could. Never invent measured probabilities, traffic, revenue, Lighthouse scores, or bundle sizes. Include stable ids, integer health, reliability, performance, accessibility, security, and maintainability scores from 0-100, and a clear disclaimer.\n\nScenario: ${input.scenario ?? 'Standard production deployment'}\n\nCode:\n${input.code}`;
+    return `You are a senior React reliability engineer. Analyze observable code signals and return one JSON object matching the EngineeringForecast contract. Describe plausible risks using calibrated words such as may or could. Never invent measured probabilities, traffic, revenue, Lighthouse scores, bundle sizes, or performance gains unless the user supplied those exact values. Include stable ids, integer health, reliability, performance, accessibility, security, and maintainability scores from 0-100, and a clear disclaimer. When a scenario is supplied, preserve a complete baseline snapshot, label the result "Scenario forecast", support every scenario-specific risk justified by the input, and include comparisons for new, increased, decreased, and unchanged risks. Match comparisons by normalized risk title plus category, retain signal evidence and confidence, and state assumptions and limitations. When no scenario is supplied, omit the scenario field.\n\nScenario: ${input.scenario ?? 'Standard production deployment'}\n\nCode:\n${input.code}`;
   }
 
   private buildPreventiveFixPrompt(input: PreventiveFixRequest): string {

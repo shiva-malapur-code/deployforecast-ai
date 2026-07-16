@@ -19,6 +19,17 @@ test('returns a controlled error for malformed Ollama output', async () => {
   });
 });
 
+test('rejects Ollama output that drops a requested scenario comparison', async () => {
+  const baselineOnly = createDemoForecast(request, 'test');
+  const provider = new OllamaProvider(async () =>
+    Response.json({ response: JSON.stringify(baselineOnly) }),
+  );
+
+  await assert.rejects(provider.forecast({ ...request, scenario: 'The API becomes slow' }), {
+    name: 'ProviderOutputError',
+  });
+});
+
 test('rejects invalid preventive-fix provider output', async () => {
   const provider = new OllamaProvider(async () =>
     Response.json({ response: JSON.stringify({ improvedCode: request.code }) }),

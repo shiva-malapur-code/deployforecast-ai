@@ -10,6 +10,7 @@ import {
   ForecastRequestSchema,
   GeneratedTestsSchema,
   PreventiveFixSchema,
+  validateScenarioForecast,
   validatePreventiveFixEvidence,
   validateGeneratedTestEvidence,
 } from '../dist/index.js';
@@ -37,6 +38,15 @@ test('accepts a valid forecast response including a security score', () => {
 
   assert.equal(result.success, true);
   assert.equal(typeof forecast.scores.security, 'number');
+});
+
+test('accepts and validates a scenario forecast with its preserved baseline', () => {
+  const input = { ...validRequest, scenario: 'The API becomes slow' };
+  const forecast = createDemoForecast(input, 'test');
+
+  assert.equal(EngineeringForecastSchema.safeParse(forecast).success, true);
+  assert.equal(validateScenarioForecast(forecast, input), true);
+  assert.equal(forecast.scenario?.label, 'Scenario forecast');
 });
 
 test('rejects a forecast with an invalid score', () => {

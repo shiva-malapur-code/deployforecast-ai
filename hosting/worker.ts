@@ -10,6 +10,7 @@ import {
   GeneratedTestsSchema,
   PreventiveFixRequestSchema,
   PreventiveFixSchema,
+  validateScenarioForecast,
   validatePreventiveFixEvidence,
   validateGeneratedTestEvidence,
   type EngineeringForecast,
@@ -125,6 +126,10 @@ export function createWorkerHandler(
               providerTimeoutMs,
             }),
           );
+          if (!validateScenarioForecast(forecast, input.data)) {
+            console.error(`[${requestId}] InvalidProviderResponse`);
+            return errorResponse('INVALID_PROVIDER_RESPONSE', requestId);
+          }
           return Response.json(forecast, { headers: { 'X-Request-ID': requestId } });
         } catch (error) {
           if (error instanceof HostedProviderTimeoutError) {

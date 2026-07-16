@@ -37,6 +37,22 @@ test('returns a controlled error for a malformed hosted forecast response', asyn
   assert.equal(response.headers.get('X-Request-ID'), payload.requestId);
 });
 
+test('rejects a hosted forecast that omits a requested scenario comparison', async () => {
+  const worker = createWorkerHandler(() => createDemoForecast(requestBody, 'test'));
+  const response = await worker.fetch(
+    new Request('https://example.test/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...requestBody, scenario: 'The API becomes slow' }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 502);
+  assert.equal(payload.code, 'INVALID_PROVIDER_RESPONSE');
+});
+
 test('uses the shared request and error contracts for invalid hosted requests', async () => {
   const worker = createWorkerHandler();
   const response = await worker.fetch(

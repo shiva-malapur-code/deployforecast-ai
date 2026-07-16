@@ -2,6 +2,12 @@ export { createDemoForecast } from './demo-forecast.js';
 export { createDemoPreventiveFix } from './demo-preventive-fix.js';
 export { createDemoGeneratedTests } from './demo-generated-tests.js';
 export {
+  compareForecastRisks,
+  getRiskComparisonKey,
+  normalizeRiskTitle,
+  validateScenarioForecast,
+} from './scenario-comparison.js';
+export {
   API_ERROR_DEFINITIONS,
   ApiErrorCodeSchema,
   ApiErrorSchema,
@@ -13,6 +19,7 @@ export {
   ForecastRiskSchema,
   ForecastScoresSchema,
   ForecastSignalSchema,
+  ForecastSnapshotSchema,
   GeneratedTestsRequestSchema,
   GeneratedTestsSchema,
   GeneratedTestStrategySchema,
@@ -21,6 +28,9 @@ export {
   PreventiveFixSchema,
   RiskCategorySchema,
   RiskLevelSchema,
+  ScenarioComparisonStatusSchema,
+  ScenarioForecastSchema,
+  ScenarioRiskComparisonSchema,
   validatePreventiveFixEvidence,
   validateGeneratedTestEvidence,
 } from './schemas.js';
@@ -34,6 +44,7 @@ export type {
   ForecastRisk,
   ForecastScores,
   ForecastSignal,
+  ForecastSnapshot,
   GeneratedTests,
   GeneratedTestsRequest,
   GeneratedTestStrategy,
@@ -42,4 +53,7 @@ export type {
   PreventiveFixRequest,
   RiskCategory,
   RiskLevel,
+  ScenarioComparisonStatus,
+  ScenarioForecast,
+  ScenarioRiskComparison,
 } from './schemas.js';

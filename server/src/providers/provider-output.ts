@@ -2,9 +2,11 @@ import {
   EngineeringForecastSchema,
   GeneratedTestsSchema,
   PreventiveFixSchema,
+  validateScenarioForecast,
   validateGeneratedTestEvidence,
   validatePreventiveFixEvidence,
   type EngineeringForecast,
+  type ForecastRequest,
   type GeneratedTests,
   type GeneratedTestsRequest,
   type PreventiveFix,
@@ -33,10 +35,14 @@ export function parseProviderPreventiveFix(
   return result.data;
 }
 
-export function parseProviderForecast(value: unknown, provider: string): EngineeringForecast {
+export function parseProviderForecast(
+  value: unknown,
+  provider: string,
+  input: ForecastRequest,
+): EngineeringForecast {
   const result = EngineeringForecastSchema.safeParse(value);
-  if (!result.success) {
-    throw new ProviderOutputError(provider, { cause: result.error });
+  if (!result.success || !validateScenarioForecast(result.data, input)) {
+    throw new ProviderOutputError(provider, { cause: result.success ? undefined : result.error });
   }
   return result.data;
 }

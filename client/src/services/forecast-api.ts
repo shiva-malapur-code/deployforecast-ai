@@ -1,6 +1,7 @@
 import {
   ApiErrorSchema,
   EngineeringForecastSchema,
+  validateScenarioForecast,
   type ApiErrorCode,
   type EngineeringForecast,
   type ForecastRequest,
@@ -27,13 +28,21 @@ export async function createForecast(
   input: ForecastRequest,
   options: ForecastRequestOptions = {},
 ): Promise<EngineeringForecast> {
-  return requestValidatedApi(
+  const forecast = await requestValidatedApi(
     '/api/forecast',
     input,
     EngineeringForecastSchema,
     'The forecast service returned an unusable response. Please try again.',
     options,
   );
+  if (!validateScenarioForecast(forecast, input)) {
+    throw new ForecastApiError(
+      'The forecast service returned an invalid scenario comparison. Please try again.',
+      'INVALID_PROVIDER_RESPONSE',
+      true,
+    );
+  }
+  return forecast;
 }
 
 interface RuntimeSchema<T> {

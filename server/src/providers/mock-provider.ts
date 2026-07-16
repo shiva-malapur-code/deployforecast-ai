@@ -18,7 +18,7 @@ export class MockProvider implements AIProvider {
 
   async forecast(input: ForecastRequest, signal?: AbortSignal) {
     await abortableDelay(700, signal);
-    return parseProviderForecast(createDemoForecast(input, this.name), this.name);
+    return parseProviderForecast(createDemoForecast(input, this.name), this.name, input);
   }
 
   async generatePreventiveFix(input: PreventiveFixRequest, signal?: AbortSignal) {

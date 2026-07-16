@@ -2,8 +2,11 @@ import { useMemo, useState } from 'react';
 import type {
   EngineeringForecast,
   ForecastHorizon,
+  ForecastSnapshot,
   RiskCategory,
   RiskLevel,
+  ScenarioComparisonStatus,
+  ScenarioForecast,
 } from '@deploy-forecast/shared';
 import {
   ArrowRight,
@@ -13,8 +16,12 @@ import {
   Download,
   Eye,
   Gauge,
+  Minus,
+  Plus,
   ShieldAlert,
   Sparkles,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -53,22 +60,27 @@ export function ForecastDashboard({
 }) {
   const [category, setCategory] = useState<(typeof categories)[number]>('all');
   const [horizon, setHorizon] = useState<'all' | ForecastHorizon>('all');
-  const confidence = useMemo(() => getOverallConfidence(forecast), [forecast]);
+  const [view, setView] = useState<'scenario' | 'baseline'>(
+    forecast.scenario ? 'scenario' : 'baseline',
+  );
+  const activeForecast: ForecastSnapshot =
+    view === 'baseline' && forecast.scenario ? forecast.scenario.baseline : forecast;
+  const confidence = useMemo(() => getOverallConfidence(activeForecast), [activeForecast]);
   const topRisks = useMemo(
     () =>
-      [...forecast.risks]
+      [...activeForecast.risks]
         .sort((left, right) => riskWeight[right.level] - riskWeight[left.level])
         .slice(0, 4),
-    [forecast.risks],
+    [activeForecast.risks],
   );
   const filteredRisks = useMemo(
     () =>
-      forecast.risks.filter(
+      activeForecast.risks.filter(
         (risk) =>
           (category === 'all' || risk.category === category) &&
           (horizon === 'all' || risk.horizon === horizon),
       ),
-    [category, forecast.risks, horizon],
+    [activeForecast.risks, category, horizon],
   );
 
   return (
@@ -80,8 +92,18 @@ export function ForecastDashboard({
               <Gauge className="size-4" />
             </span>
             <div>
-              <h2 className="font-semibold text-white">Engineering Forecast</h2>
-              <p className="text-[11px] text-muted-foreground">Evidence-based deployment outlook</p>
+              <h2 className="font-semibold text-white">
+                {forecast.scenario
+                  ? view === 'scenario'
+                    ? 'Scenario Forecast'
+                    : 'Baseline Forecast'
+                  : 'Engineering Forecast'}
+              </h2>
+              <p className="text-[11px] text-muted-foreground">
+                {forecast.scenario && view === 'scenario'
+                  ? forecast.scenario.input
+                  : 'Evidence-based deployment outlook'}
+              </p>
             </div>
           </div>
           <Button variant="ghost" size="default" onClick={onDownload} className="h-8 px-2 text-xs">
@@ -94,11 +116,11 @@ export function ForecastDashboard({
             <p className="text-xs font-medium text-muted-foreground">Application Health</p>
             <div className="mt-2 flex items-baseline gap-1">
               <span className="text-4xl font-bold tracking-tight text-white">
-                {forecast.scores.health}
+                {activeForecast.scores.health}
               </span>
               <span className="text-sm text-muted-foreground">/100</span>
             </div>
-            <HealthMeter value={forecast.scores.health} />
+            <HealthMeter value={activeForecast.scores.health} />
           </div>
 
           <div className="p-5">
@@ -109,10 +131,10 @@ export function ForecastDashboard({
             <span
               className={cn(
                 'mt-4 inline-flex rounded-full border px-3 py-1.5 text-sm font-bold uppercase tracking-[0.12em]',
-                riskStyle[forecast.deploymentRisk],
+                riskStyle[activeForecast.deploymentRisk],
               )}
             >
-              {forecast.deploymentRisk}
+              {activeForecast.deploymentRisk}
             </span>
           </div>
 
@@ -123,12 +145,21 @@ export function ForecastDashboard({
             </div>
             <p className="mt-4 text-2xl font-bold capitalize text-white">{confidence}</p>
             <p className="mt-1 text-[11px] text-muted-foreground">
-              Based on {forecast.signals.length} observable signal
-              {forecast.signals.length === 1 ? '' : 's'}
+              Based on {activeForecast.signals.length} observable signal
+              {activeForecast.signals.length === 1 ? '' : 's'}
             </p>
           </div>
         </div>
       </Card>
+
+      {forecast.scenario && (
+        <ScenarioComparisonPanel
+          scenario={forecast.scenario}
+          scenarioSignals={forecast.signals}
+          view={view}
+          onViewChange={setView}
+        />
+      )}
 
       <Card className="p-5">
         <div className="flex items-center justify-between gap-3">
@@ -177,17 +208,17 @@ export function ForecastDashboard({
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
           Forecast summary
         </p>
-        <p className="mt-3 text-sm leading-6 text-[#c6d3cf]">{forecast.summary}</p>
+        <p className="mt-3 text-sm leading-6 text-[#c6d3cf]">{activeForecast.summary}</p>
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs sm:grid-cols-5">
-          <Score label="Reliability" value={forecast.scores.reliability} />
-          <Score label="Performance" value={forecast.scores.performance} />
-          <Score label="Accessibility" value={forecast.scores.accessibility} />
-          <Score label="Security" value={forecast.scores.security} />
-          <Score label="Maintainability" value={forecast.scores.maintainability} />
+          <Score label="Reliability" value={activeForecast.scores.reliability} />
+          <Score label="Performance" value={activeForecast.scores.performance} />
+          <Score label="Accessibility" value={activeForecast.scores.accessibility} />
+          <Score label="Security" value={activeForecast.scores.security} />
+          <Score label="Maintainability" value={activeForecast.scores.maintainability} />
         </div>
       </Card>
 
-      <ForecastTimeline forecast={forecast} />
+      <ForecastTimeline forecast={activeForecast} />
 
       <Card className="p-4">
         <div className="mb-4">
@@ -224,7 +255,9 @@ export function ForecastDashboard({
 
       <div className="relative space-y-3 before:absolute before:bottom-8 before:left-[19px] before:top-8 before:w-px before:bg-border">
         {filteredRisks.map((risk) => {
-          const evidence = forecast.signals.filter((signal) => risk.signalIds.includes(signal.id));
+          const evidence = activeForecast.signals.filter((signal) =>
+            risk.signalIds.includes(signal.id),
+          );
           return (
             <Card
               key={risk.id}
@@ -290,8 +323,8 @@ export function ForecastDashboard({
       <Card className="p-5">
         <h3 className="font-semibold text-white">Prevention plan</h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {forecast.preventionPlan.length ? (
-            forecast.preventionPlan.map((step) => (
+          {activeForecast.preventionPlan.length ? (
+            activeForecast.preventionPlan.map((step) => (
               <div key={step} className="flex gap-2.5 text-sm leading-5 text-muted-foreground">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
                 {step}
@@ -304,14 +337,158 @@ export function ForecastDashboard({
           )}
         </div>
       </Card>
-      <p className="px-2 text-xs leading-5 text-muted-foreground">{forecast.disclaimer}</p>
+      <p className="px-2 text-xs leading-5 text-muted-foreground">{activeForecast.disclaimer}</p>
     </div>
+  );
+}
+
+const comparisonStyle: Record<ScenarioComparisonStatus, string> = {
+  new: 'border-sky-300/30 bg-sky-300/10 text-sky-200',
+  increased: 'border-orange-300/30 bg-orange-300/10 text-orange-200',
+  decreased: 'border-primary/30 bg-primary/10 text-primary',
+  unchanged: 'border-border bg-white/[0.025] text-muted-foreground',
+};
+
+function ScenarioComparisonPanel({
+  scenario,
+  scenarioSignals,
+  view,
+  onViewChange,
+}: {
+  scenario: ScenarioForecast;
+  scenarioSignals: ForecastSnapshot['signals'];
+  view: 'scenario' | 'baseline';
+  onViewChange: (view: 'scenario' | 'baseline') => void;
+}) {
+  const counts = scenario.comparisons.reduce(
+    (totals, comparison) => ({
+      ...totals,
+      [comparison.status]: totals[comparison.status] + 1,
+    }),
+    { new: 0, increased: 0, decreased: 0, unchanged: 0 },
+  );
+
+  return (
+    <Card className="overflow-hidden border-primary/20">
+      <div className="flex flex-col justify-between gap-4 border-b border-border bg-primary/[0.035] px-5 py-4 sm:flex-row sm:items-start">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            Scenario forecast comparison
+          </p>
+          <p className="mt-2 text-sm font-medium text-white">“{scenario.input}”</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Compared with the preserved baseline using normalized title and category matching.
+          </p>
+        </div>
+        <div
+          className="flex shrink-0 rounded-lg border border-border bg-black/10 p-1"
+          role="group"
+          aria-label="Forecast view"
+        >
+          <button
+            type="button"
+            aria-pressed={view === 'scenario'}
+            onClick={() => onViewChange('scenario')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+              view === 'scenario' ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
+            )}
+          >
+            Scenario forecast
+          </button>
+          <button
+            type="button"
+            aria-pressed={view === 'baseline'}
+            onClick={() => onViewChange('baseline')}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-semibold transition-colors',
+              view === 'baseline' ? 'bg-primary/10 text-primary' : 'text-muted-foreground',
+            )}
+          >
+            Baseline forecast
+          </button>
+        </div>
+      </div>
+
+      <div className="p-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {(Object.keys(counts) as ScenarioComparisonStatus[]).map((status) => (
+            <div key={status} className={cn('rounded-lg border p-3', comparisonStyle[status])}>
+              <div className="flex items-center gap-2">
+                <ComparisonIcon status={status} />
+                <span className="text-[10px] font-bold uppercase tracking-wider">{status}</span>
+              </div>
+              <p className="mt-2 text-xl font-bold">{counts[status]}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 space-y-2">
+          {scenario.comparisons.map((comparison) => {
+            const evidence = scenarioSignals.filter((signal) =>
+              comparison.signalIds.includes(signal.id),
+            );
+            return (
+              <div key={comparison.key} className="rounded-lg border border-border bg-black/10 p-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{comparison.title}</p>
+                    <p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {comparison.category} · {comparison.confidence} confidence
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'rounded-full border px-2 py-1 text-[10px] font-bold uppercase tracking-wider',
+                      comparisonStyle[comparison.status],
+                    )}
+                  >
+                    {comparison.baselineLevel ?? 'not present'} → {comparison.scenarioLevel} ·{' '}
+                    {comparison.status}
+                  </span>
+                </div>
+                {evidence.length > 0 && (
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                    Evidence: {evidence.map((signal) => signal.evidence).join(' ')}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <ScenarioNotes title="Assumptions" items={scenario.assumptions} />
+          <ScenarioNotes title="Limitations" items={scenario.limitations} />
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function ComparisonIcon({ status }: { status: ScenarioComparisonStatus }) {
+  if (status === 'new') return <Plus className="size-3.5" aria-hidden="true" />;
+  if (status === 'increased') return <TrendingUp className="size-3.5" aria-hidden="true" />;
+  if (status === 'decreased') return <TrendingDown className="size-3.5" aria-hidden="true" />;
+  return <Minus className="size-3.5" aria-hidden="true" />;
+}
+
+function ScenarioNotes({ title, items }: { title: string; items: string[] }) {
+  return (
+    <details className="rounded-lg border border-border bg-white/[0.015] p-3">
+      <summary className="cursor-pointer text-xs font-semibold text-white">{title}</summary>
+      <ul className="mt-3 space-y-2 text-xs leading-5 text-muted-foreground">
+        {items.map((item) => (
+          <li key={item}>• {item}</li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
 const timelineHorizons: ForecastHorizon[] = ['7-days', '30-days', '90-days'];
 
-function ForecastTimeline({ forecast }: { forecast: EngineeringForecast }) {
+function ForecastTimeline({ forecast }: { forecast: ForecastSnapshot }) {
   return (
     <Card className="overflow-hidden">
       <div className="border-b border-border px-5 py-4">
@@ -504,7 +681,7 @@ function HealthMeter({ value }: { value: number }) {
   );
 }
 
-function getOverallConfidence(forecast: EngineeringForecast): 'low' | 'medium' | 'high' {
+function getOverallConfidence(forecast: ForecastSnapshot): 'low' | 'medium' | 'high' {
   if (!forecast.risks.length) return 'medium';
 
   const confidenceWeight = { low: 1, medium: 2, high: 3 } as const;

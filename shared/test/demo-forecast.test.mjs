@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDemoForecast } from '../dist/index.js';
+import { compareForecastRisks, createDemoForecast } from '../dist/index.js';
 
 test('derives risks from observable code signals', () => {
   const forecast = createDemoForecast(
@@ -49,6 +49,151 @@ test('adds a calibrated what-if scenario without inventing probabilities', () =>
 
   assert.ok(forecast.risks.some((risk) => risk.id === 'risk-scenario-scale'));
   assert.doesNotMatch(forecast.summary, /\d+% chance/i);
+});
+
+test('produces multiple scenario-specific risks from independent scenario factors', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `function Search({ items }) {
+  fetch('/api/search');
+  return items.map((item) => <div key={Math.random()}>{item.name}</div>);
+}`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'Traffic grows while the API becomes slow and the catalog reaches 100k items',
+    },
+    'test',
+  );
+
+  assert.ok(forecast.scenario);
+  const newRisks = forecast.scenario.comparisons.filter((item) => item.status === 'new');
+  assert.deepEqual(
+    new Set(newRisks.map((item) => item.scenarioRiskId)),
+    new Set(['risk-scenario-scale', 'risk-scenario-latency', 'risk-scenario-volume']),
+  );
+});
+
+test('preserves the complete baseline so it can be restored without another request', () => {
+  const request = {
+    code: `function Search() { fetch('/api/search'); return <button>Search</button>; }`,
+    language: 'typescript',
+    framework: 'react',
+  };
+  const baseline = createDemoForecast(request, 'test');
+  const scenarioForecast = createDemoForecast(
+    { ...request, scenario: 'The API becomes slow' },
+    'test',
+  );
+
+  assert.ok(scenarioForecast.scenario);
+  assert.deepEqual(scenarioForecast.scenario.baseline, {
+    summary: baseline.summary,
+    deploymentRisk: baseline.deploymentRisk,
+    scores: baseline.scores,
+    signals: baseline.signals,
+    risks: baseline.risks,
+    preventionPlan: baseline.preventionPlan,
+    disclaimer: baseline.disclaimer,
+  });
+});
+
+test('detects an increased severity by normalized title and category', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `function Search() { fetch('/api/search'); return <button>Search</button>; }`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'The API becomes slow',
+    },
+    'test',
+  );
+
+  const comparison = forecast.scenario?.comparisons.find(
+    (item) => item.scenarioRiskId === 'risk-fetch-errors',
+  );
+  assert.equal(comparison?.status, 'increased');
+  assert.equal(comparison?.baselineLevel, 'high');
+  assert.equal(comparison?.scenarioLevel, 'critical');
+});
+
+test('detects a decreased severity when the scenario supplies a mitigation', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `function Search() { fetch('/api/search'); return <button>Search</button>; }`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'Add retries and a recoverable error state',
+    },
+    'test',
+  );
+
+  const comparison = forecast.scenario?.comparisons.find(
+    (item) => item.scenarioRiskId === 'risk-fetch-errors',
+  );
+  assert.equal(comparison?.status, 'decreased');
+  assert.equal(comparison?.baselineLevel, 'high');
+  assert.equal(comparison?.scenarioLevel, 'medium');
+});
+
+test('detects a new scenario risk that is absent from baseline', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `export function Button() { return <button>Save</button>; }`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'Traffic grows',
+    },
+    'test',
+  );
+
+  const comparison = forecast.scenario?.comparisons.find(
+    (item) => item.scenarioRiskId === 'risk-scenario-scale',
+  );
+  assert.equal(comparison?.status, 'new');
+  assert.equal(comparison?.baselineRiskId, undefined);
+});
+
+test('keeps baseline risks unchanged when the scenario has no supported risk effect', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `export function Clear() { return <div onClick={() => clear()}>Clear</div>; }`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'Enable dark mode for the settings page',
+    },
+    'test',
+  );
+
+  assert.ok(forecast.scenario);
+  assert.equal(forecast.risks.length, forecast.scenario.baseline.risks.length);
+  assert.ok(forecast.scenario.comparisons.length > 0);
+  assert.ok(forecast.scenario.comparisons.every((item) => item.status === 'unchanged'));
+});
+
+test('matches comparison risks by normalized title plus category', () => {
+  const baselineForecast = createDemoForecast(
+    {
+      code: `function Search() { fetch('/api/search'); return <button>Search</button>; }`,
+      language: 'typescript',
+      framework: 'react',
+    },
+    'test',
+  );
+  const baselineRisk = baselineForecast.risks.find((risk) => risk.id === 'risk-fetch-errors');
+  assert.ok(baselineRisk);
+
+  const [comparison] = compareForecastRisks(
+    [baselineRisk],
+    [{ ...baselineRisk, title: `  ${baselineRisk.title.toUpperCase()}!  ` }],
+  );
+  assert.equal(comparison?.status, 'unchanged');
+  assert.equal(comparison?.baselineRiskId, baselineRisk.id);
+
+  const [differentCategory] = compareForecastRisks(
+    [baselineRisk],
+    [{ ...baselineRisk, category: 'performance' }],
+  );
+  assert.equal(differentCategory?.status, 'new');
 });
 
 test('evaluates every useEffect dependency boundary independently', () => {

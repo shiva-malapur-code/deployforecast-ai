@@ -24,3 +24,26 @@ test('renders the security score and purpose-built empty forecast states', () =>
   assert.match(markup, /No preventive actions are required/);
   assert.match(markup, /No risks are forecast for this horizon/);
 });
+
+test('labels scenario results and exposes baseline restoration with comparison notes', () => {
+  const forecast = createDemoForecast(
+    {
+      code: `function Search() { fetch('/api/search'); return <button>Search</button>; }`,
+      language: 'typescript',
+      framework: 'react',
+      scenario: 'The API becomes slow',
+    },
+    'test',
+  );
+  const markup = renderToStaticMarkup(
+    <ForecastDashboard forecast={forecast} onDownload={() => undefined} />,
+  );
+
+  assert.match(markup, /Scenario Forecast/);
+  assert.match(markup, /Scenario forecast comparison/);
+  assert.match(markup, /Baseline forecast/);
+  assert.match(markup, /normalized title and category matching/);
+  assert.match(markup, /Assumptions/);
+  assert.match(markup, /Limitations/);
+  assert.match(markup, /increased/);
+});
