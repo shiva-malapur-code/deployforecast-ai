@@ -1,5 +1,6 @@
 import {
-  ApiErrorSchema,
+  API_ERROR_DEFINITIONS,
+  createApiError,
   createDemoForecast,
   EngineeringForecastSchema,
   ForecastRequestSchema,
@@ -13,43 +14,99 @@ interface Environment {
 
 type HostedForecastFactory = (
   input: ForecastRequest,
+  signal?: AbortSignal,
 ) => EngineeringForecast | Promise<EngineeringForecast>;
+
+interface WorkerOptions {
+  requestTimeoutMs?: number;
+  providerTimeoutMs?: number;
+  rateLimitWindowMs?: number;
+  rateLimitMax?: number;
+}
 
 const publicDemoForecast: HostedForecastFactory = (input) =>
   createDemoForecast(input, 'public-demo');
 
-function errorResponse(error: string, status: number, details?: unknown): Response {
-  return Response.json(ApiErrorSchema.parse({ error, details }), { status });
+function errorResponse(
+  code: keyof typeof API_ERROR_DEFINITIONS,
+  requestId: string,
+  details?: unknown,
+): Response {
+  return Response.json(createApiError(code, requestId, details), {
+    status: API_ERROR_DEFINITIONS[code].status,
+    headers: { 'X-Request-ID': requestId },
+  });
 }
 
-export function createWorkerHandler(forecastFactory: HostedForecastFactory = publicDemoForecast) {
+export function createWorkerHandler(
+  forecastFactory: HostedForecastFactory = publicDemoForecast,
+  options: WorkerOptions = {},
+) {
+  const requestTimeoutMs = options.requestTimeoutMs ?? 20_000;
+  const providerTimeoutMs = options.providerTimeoutMs ?? 15_000;
+  const rateLimitWindowMs = options.rateLimitWindowMs ?? 60_000;
+  const rateLimitMax = options.rateLimitMax ?? 20;
+  const clients = new Map<string, { count: number; resetAt: number }>();
+
   return {
     async fetch(request: Request, env: Environment): Promise<Response> {
       const url = new URL(request.url);
+      const requestId = crypto.randomUUID();
 
       if (url.pathname === '/api/health') {
-        return Response.json({ status: 'ok' });
+        return Response.json({ status: 'ok' }, { headers: { 'X-Request-ID': requestId } });
       }
 
       if (url.pathname === '/api/forecast' && request.method === 'POST') {
+        const clientKey =
+          request.headers.get('CF-Connecting-IP') ??
+          request.headers.get('X-Forwarded-For') ??
+          'unknown';
+        const now = Date.now();
+        const current = clients.get(clientKey);
+        const rate =
+          !current || current.resetAt <= now
+            ? { count: 0, resetAt: now + rateLimitWindowMs }
+            : current;
+        rate.count += 1;
+        clients.set(clientKey, rate);
+        if (rate.count > rateLimitMax) {
+          return errorResponse('RATE_LIMITED', requestId);
+        }
+
         let body: unknown;
         try {
           body = await request.json();
         } catch {
-          return errorResponse('Invalid forecast request', 400);
+          return errorResponse('INVALID_REQUEST', requestId);
         }
 
         const input = ForecastRequestSchema.safeParse(body);
         if (!input.success) {
-          return errorResponse('Invalid forecast request', 400, input.error.flatten());
+          return errorResponse('INVALID_REQUEST', requestId, input.error.flatten());
         }
 
         try {
-          const forecast = EngineeringForecastSchema.parse(await forecastFactory(input.data));
-          return Response.json(forecast);
+          const forecast = EngineeringForecastSchema.parse(
+            await executeHostedForecast(forecastFactory, input.data, {
+              requestTimeoutMs,
+              providerTimeoutMs,
+            }),
+          );
+          return Response.json(forecast, { headers: { 'X-Request-ID': requestId } });
         } catch (error) {
-          console.error('Hosted forecast produced an invalid response', error);
-          return errorResponse('Forecast provider returned an invalid response.', 502);
+          if (error instanceof HostedProviderTimeoutError) {
+            return errorResponse('PROVIDER_TIMEOUT', requestId);
+          }
+          if (error instanceof HostedRequestTimeoutError) {
+            return errorResponse('REQUEST_TIMEOUT', requestId);
+          }
+          if (error instanceof Error && error.name === 'ZodError') {
+            console.error(`[${requestId}] InvalidProviderResponse`);
+            return errorResponse('INVALID_PROVIDER_RESPONSE', requestId);
+          }
+          console.error(`[${requestId}] HostedForecastError`);
+          return errorResponse('INTERNAL_ERROR', requestId);
         }
       }
 
@@ -59,6 +116,44 @@ export function createWorkerHandler(forecastFactory: HostedForecastFactory = pub
       return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
     },
   };
+}
+
+class HostedRequestTimeoutError extends Error {}
+class HostedProviderTimeoutError extends Error {}
+
+async function executeHostedForecast(
+  forecastFactory: HostedForecastFactory,
+  input: ForecastRequest,
+  options: Required<Pick<WorkerOptions, 'requestTimeoutMs' | 'providerTimeoutMs'>>,
+) {
+  const controller = new AbortController();
+  let requestTimer: ReturnType<typeof setTimeout> | undefined;
+  let providerTimer: ReturnType<typeof setTimeout> | undefined;
+  const requestTimeout = new Promise<never>((_, reject) => {
+    requestTimer = setTimeout(() => {
+      const error = new HostedRequestTimeoutError();
+      controller.abort(error);
+      reject(error);
+    }, options.requestTimeoutMs);
+  });
+  const providerTimeout = new Promise<never>((_, reject) => {
+    providerTimer = setTimeout(() => {
+      const error = new HostedProviderTimeoutError();
+      controller.abort(error);
+      reject(error);
+    }, options.providerTimeoutMs);
+  });
+
+  try {
+    return await Promise.race([
+      forecastFactory(input, controller.signal),
+      requestTimeout,
+      providerTimeout,
+    ]);
+  } finally {
+    clearTimeout(requestTimer);
+    clearTimeout(providerTimer);
+  }
 }
 
 export default createWorkerHandler();

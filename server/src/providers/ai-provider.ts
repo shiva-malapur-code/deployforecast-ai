@@ -2,5 +2,12 @@ import type { EngineeringForecast, ForecastRequest } from '@deploy-forecast/shar
 
 export interface AIProvider {
   readonly name: string;
-  forecast(input: ForecastRequest): Promise<EngineeringForecast>;
+  forecast(input: ForecastRequest, signal?: AbortSignal): Promise<EngineeringForecast>;
+}
+
+export class ProviderUnavailableError extends Error {
+  constructor(options?: ErrorOptions) {
+    super('Forecast provider unavailable.', options);
+    this.name = 'ProviderUnavailableError';
+  }
 }

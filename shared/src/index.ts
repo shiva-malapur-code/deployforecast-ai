@@ -1,6 +1,9 @@
 export { createDemoForecast } from './demo-forecast.js';
 export {
+  API_ERROR_DEFINITIONS,
+  ApiErrorCodeSchema,
   ApiErrorSchema,
+  createApiError,
   EngineeringForecastSchema,
   ForecastConfidenceSchema,
   ForecastHorizonSchema,
@@ -13,6 +16,7 @@ export {
 } from './schemas.js';
 export type {
   ApiError,
+  ApiErrorCode,
   EngineeringForecast,
   ForecastConfidence,
   ForecastHorizon,

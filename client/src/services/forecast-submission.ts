@@ -6,13 +6,17 @@ export interface ForecastSubmission {
   request: Readonly<ForecastRequest>;
 }
 
-type ForecastRequester = (request: ForecastRequest) => Promise<EngineeringForecast>;
+export type ForecastRequester = (
+  request: ForecastRequest,
+  options?: { signal?: AbortSignal },
+) => Promise<EngineeringForecast>;
 
 export async function submitForecast(
   input: ForecastRequest,
   requestForecast: ForecastRequester = createForecast,
+  options?: { signal?: AbortSignal },
 ): Promise<ForecastSubmission> {
   const request = Object.freeze({ ...input });
-  const forecast = await requestForecast(request);
+  const forecast = await requestForecast(request, options);
   return { forecast, request };
 }

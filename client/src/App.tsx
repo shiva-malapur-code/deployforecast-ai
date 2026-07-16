@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ForecastRequest } from '@deploy-forecast/shared';
 import {
   ArrowDown,
@@ -16,7 +16,9 @@ import { ForecastDashboard } from '@/components/forecast-dashboard';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sampleCode } from '@/data/sample-code';
-import { submitForecast, type ForecastSubmission } from '@/services/forecast-submission';
+import { createForecast, ForecastApiError } from '@/services/forecast-api';
+import { ForecastRequestManager } from '@/services/forecast-request-manager';
+import type { ForecastSubmission } from '@/services/forecast-submission';
 import { downloadForecastReport } from '@/utils/report-generator';
 
 const scenarioSuggestions = [
@@ -26,31 +28,55 @@ const scenarioSuggestions = [
 ];
 
 export default function App() {
+  const requestManagerRef = useRef<ForecastRequestManager | null>(null);
+  if (!requestManagerRef.current) {
+    requestManagerRef.current = new ForecastRequestManager(createForecast);
+  }
   const [code, setCode] = useState(sampleCode);
   const [language, setLanguage] = useState<ForecastRequest['language']>('typescript');
   const [submission, setSubmission] = useState<ForecastSubmission | null>(null);
   const [scenario, setScenario] = useState('Traffic grows 10×');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; recoverable: boolean } | null>(null);
+  const [retryRequest, setRetryRequest] = useState<Readonly<ForecastRequest> | null>(null);
 
-  async function runForecast() {
+  useEffect(() => () => requestManagerRef.current?.abort(), []);
+
+  const currentRequest: ForecastRequest = {
+    code,
+    language,
+    framework: 'react',
+    scenario: scenario.trim() || undefined,
+  };
+
+  async function runForecast(requestOverride?: ForecastRequest) {
+    const input = Object.freeze({ ...(requestOverride ?? currentRequest) });
+    const requestManager = requestManagerRef.current!;
+    if (requestManager.isDuplicate(input)) return;
+
     setLoading(true);
     setError(null);
+    setSubmission(null);
     document.querySelector('#workspace')?.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      setSubmission(
-        await submitForecast({
-          code,
-          language,
-          framework: 'react',
-          scenario: scenario.trim() || undefined,
-        }),
-      );
+      const result = await requestManager.start(input);
+      if (result.status === 'success') {
+        setSubmission(result.submission);
+        setRetryRequest(null);
+      }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Unable to generate the forecast.');
+      const failure =
+        caught instanceof ForecastApiError
+          ? { message: caught.message, recoverable: caught.recoverable }
+          : {
+              message: 'The forecast could not be generated. Please try again.',
+              recoverable: true,
+            };
+      setError(failure);
+      setRetryRequest(input);
     } finally {
-      setLoading(false);
+      setLoading(requestManager.isRunning);
     }
   }
 
@@ -166,8 +192,12 @@ export default function App() {
                 </p>
               </div>
               <Button
-                onClick={runForecast}
-                disabled={loading || code.trim().length < 20 || code.length > 50_000}
+                onClick={() => void runForecast()}
+                disabled={
+                  code.trim().length < 20 ||
+                  code.length > 50_000 ||
+                  (loading && requestManagerRef.current.isDuplicate(currentRequest))
+                }
                 size="lg"
               >
                 {loading ? (
@@ -216,9 +246,19 @@ export default function App() {
             {error && (
               <div
                 role="alert"
-                className="mb-4 rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200"
+                className="mb-4 flex flex-col items-start justify-between gap-3 rounded-lg border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-200 sm:flex-row sm:items-center"
               >
-                {error}
+                <span>{error.message}</span>
+                {error.recoverable && retryRequest && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void runForecast(retryRequest)}
+                    disabled={loading}
+                  >
+                    Try again
+                  </Button>
+                )}
               </div>
             )}
 
@@ -230,7 +270,22 @@ export default function App() {
                 onChange={setCode}
                 onLanguageChange={setLanguage}
               />
-              {submission ? (
+              {loading ? (
+                <Card
+                  className="grid min-h-[480px] place-items-center border-dashed p-8 text-center"
+                  aria-live="polite"
+                >
+                  <div>
+                    <LoaderCircle className="mx-auto size-7 animate-spin text-primary" />
+                    <h3 className="mt-4 text-lg font-semibold text-white">
+                      Building a fresh forecast
+                    </h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Previous results are hidden until this request finishes.
+                    </p>
+                  </div>
+                </Card>
+              ) : submission ? (
                 <ForecastDashboard
                   forecast={submission.forecast}
                   onDownload={() =>

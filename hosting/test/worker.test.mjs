@@ -25,9 +25,11 @@ test('returns a controlled error for a malformed hosted forecast response', asyn
   );
 
   assert.equal(response.status, 502);
-  assert.deepEqual(await response.json(), {
-    error: 'Forecast provider returned an invalid response.',
-  });
+  const payload = await response.json();
+  assert.equal(payload.code, 'INVALID_PROVIDER_RESPONSE');
+  assert.equal(payload.recoverable, true);
+  assert.equal(typeof payload.requestId, 'string');
+  assert.equal(response.headers.get('X-Request-ID'), payload.requestId);
 });
 
 test('uses the shared request and error contracts for invalid hosted requests', async () => {
@@ -44,5 +46,29 @@ test('uses the shared request and error contracts for invalid hosted requests', 
 
   assert.equal(response.status, 400);
   assert.equal(ApiErrorSchema.safeParse(payload).success, true);
-  assert.equal(payload.error, 'Invalid forecast request');
+  assert.equal(payload.code, 'INVALID_REQUEST');
+  assert.equal(response.headers.get('X-Request-ID'), payload.requestId);
+});
+
+test('returns the shared provider-timeout error contract', async () => {
+  const worker = createWorkerHandler(
+    (_input, signal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+    { providerTimeoutMs: 5, requestTimeoutMs: 50 },
+  );
+  const response = await worker.fetch(
+    new Request('https://example.test/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 504);
+  assert.equal(payload.code, 'PROVIDER_TIMEOUT');
+  assert.equal(ApiErrorSchema.safeParse(payload).success, true);
 });

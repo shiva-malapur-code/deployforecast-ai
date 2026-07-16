@@ -8,6 +8,10 @@ const envSchema = z.object({
   AI_PROVIDER: z.enum(['mock', 'ollama']).default('mock'),
   OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
   OLLAMA_MODEL: z.string().min(1).default('qwen2.5-coder:7b'),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(55_000),
+  PROVIDER_TIMEOUT_MS: z.coerce.number().int().positive().default(45_000),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60_000),
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(20),
 });
 
 export const config = envSchema.parse(process.env);

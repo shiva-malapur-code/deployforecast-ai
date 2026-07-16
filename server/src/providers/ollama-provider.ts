@@ -1,7 +1,7 @@
 import type { ForecastRequest } from '@deploy-forecast/shared';
 import { z } from 'zod';
 import { config } from '../config.js';
-import type { AIProvider } from './ai-provider.js';
+import { ProviderUnavailableError, type AIProvider } from './ai-provider.js';
 import { parseProviderForecast, ProviderOutputError } from './provider-output.js';
 
 const ollamaResponseSchema = z.object({ response: z.string() });
@@ -11,21 +11,27 @@ export class OllamaProvider implements AIProvider {
 
   constructor(private readonly fetchImpl: typeof fetch = fetch) {}
 
-  async forecast(input: ForecastRequest) {
-    const response = await this.fetchImpl(`${config.OLLAMA_BASE_URL}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: config.OLLAMA_MODEL,
-        stream: false,
-        format: 'json',
-        prompt: this.buildPrompt(input),
-      }),
-      signal: AbortSignal.timeout(60_000),
-    });
+  async forecast(input: ForecastRequest, signal?: AbortSignal) {
+    let response: Response;
+    try {
+      response = await this.fetchImpl(`${config.OLLAMA_BASE_URL}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: config.OLLAMA_MODEL,
+          stream: false,
+          format: 'json',
+          prompt: this.buildPrompt(input),
+        }),
+        signal,
+      });
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      throw new ProviderUnavailableError({ cause: error });
+    }
 
     if (!response.ok) {
-      throw new Error(`Ollama request failed with status ${response.status}`);
+      throw new ProviderUnavailableError();
     }
 
     let payload: z.infer<typeof ollamaResponseSchema>;

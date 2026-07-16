@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  ApiErrorSchema,
+  createApiError,
   createDemoForecast,
   EngineeringForecastSchema,
   ForecastRequestSchema,
@@ -52,4 +54,12 @@ test('rejects a forecast with an invalid risk category', () => {
   });
 
   assert.equal(result.success, false);
+});
+
+test('creates a provider-safe structured API error', () => {
+  const error = createApiError('PROVIDER_TIMEOUT', 'request-123');
+
+  assert.equal(ApiErrorSchema.safeParse(error).success, true);
+  assert.equal(error.recoverable, true);
+  assert.equal(error.requestId, 'request-123');
 });

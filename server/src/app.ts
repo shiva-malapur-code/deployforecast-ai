@@ -1,43 +1,37 @@
 import cors from 'cors';
 import express, { type ErrorRequestHandler } from 'express';
 import helmet from 'helmet';
-import { ZodError } from 'zod';
-import { ApiErrorSchema } from '@deploy-forecast/shared';
+import { createApiError } from '@deploy-forecast/shared';
 import { config } from './config.js';
-import { ProviderOutputError } from './providers/provider-output.js';
+import { mapApiError } from './errors.js';
+import { createRateLimiter, requestIdMiddleware } from './request-middleware.js';
 import { forecastRouter } from './routes/forecast.js';
 
 export const app = express();
 
 app.use(helmet());
 app.use(cors({ origin: config.CLIENT_ORIGIN }));
+app.use(requestIdMiddleware);
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/api/health', (_request, response) => {
   response.json({ status: 'ok' });
 });
-app.use('/api/forecast', forecastRouter);
+app.use(
+  '/api/forecast',
+  createRateLimiter(config.RATE_LIMIT_WINDOW_MS, config.RATE_LIMIT_MAX),
+  forecastRouter,
+);
 
 app.use((_request, response) => {
-  response.status(404).json(ApiErrorSchema.parse({ error: 'Route not found' }));
+  response.status(404).json(createApiError('NOT_FOUND', String(response.locals.requestId)));
 });
 
 const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
-  if (error instanceof ZodError) {
-    response
-      .status(400)
-      .json(ApiErrorSchema.parse({ error: 'Invalid forecast request', details: error.flatten() }));
-    return;
-  }
-
-  if (error instanceof ProviderOutputError) {
-    console.error(`Invalid forecast from ${error.provider}`, error.cause);
-    response.status(502).json(ApiErrorSchema.parse({ error: error.message }));
-    return;
-  }
-
-  console.error(error);
-  response.status(500).json(ApiErrorSchema.parse({ error: 'Forecast generation failed' }));
+  const requestId = String(response.locals.requestId);
+  const mapped = mapApiError(error, requestId);
+  console.error(`[${requestId}] ${error instanceof Error ? error.name : 'UnknownError'}`);
+  response.status(mapped.status).json(mapped.payload);
 };
 
 app.use(errorHandler);
