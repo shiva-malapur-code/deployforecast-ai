@@ -8,8 +8,14 @@ import type {
 } from './index.js';
 
 type Finding = {
-  signal: Omit<ForecastSignal, 'line'> & { needle: string };
+  signal: Omit<ForecastSignal, 'line'> & { index: number };
   risk: ForecastRisk;
+};
+
+type CallExpression = {
+  start: number;
+  openParenthesis: number;
+  closeParenthesis: number;
 };
 
 const severityPenalty: Record<RiskLevel, number> = {
@@ -21,20 +27,153 @@ const severityPenalty: Record<RiskLevel, number> = {
 
 const severityRank: Record<RiskLevel, number> = { low: 0, medium: 1, high: 2, critical: 3 };
 
-function lineOf(code: string, needle: string): number | undefined {
-  const index = code.indexOf(needle);
+function lineOf(code: string, index: number): number | undefined {
   return index < 0 ? undefined : code.slice(0, index).split('\n').length;
+}
+
+function findClosingParenthesis(code: string, openParenthesis: number): number | undefined {
+  let depth = 0;
+  let quote: "'" | '"' | '`' | null = null;
+  let escaped = false;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = openParenthesis; index < code.length; index += 1) {
+    const character = code[index];
+    const nextCharacter = code[index + 1];
+
+    if (lineComment) {
+      if (character === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === '*' && nextCharacter === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === '\\') {
+        escaped = true;
+      } else if (character === quote) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '/' && nextCharacter === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === '/' && nextCharacter === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') depth += 1;
+    if (character === ')') {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return undefined;
+}
+
+function findCalls(code: string, callee: string): CallExpression[] {
+  const calls: CallExpression[] = [];
+  const expression = new RegExp(`\\b${callee}\\s*\\(`, 'g');
+
+  for (const match of code.matchAll(expression)) {
+    const start = match.index;
+    const openParenthesis = start + match[0].lastIndexOf('(');
+    const closeParenthesis = findClosingParenthesis(code, openParenthesis);
+    if (closeParenthesis !== undefined) {
+      calls.push({ start, openParenthesis, closeParenthesis });
+    }
+  }
+
+  return calls;
+}
+
+function hasTopLevelArgumentSeparator(code: string, call: CallExpression): boolean {
+  let roundDepth = 0;
+  let squareDepth = 0;
+  let curlyDepth = 0;
+  let quote: "'" | '"' | '`' | null = null;
+  let escaped = false;
+
+  for (let index = call.openParenthesis + 1; index < call.closeParenthesis; index += 1) {
+    const character = code[index];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (character === '\\') escaped = true;
+      else if (character === quote) quote = null;
+      continue;
+    }
+    if (character === "'" || character === '"' || character === '`') {
+      quote = character;
+      continue;
+    }
+    if (character === '(') roundDepth += 1;
+    else if (character === ')') roundDepth -= 1;
+    else if (character === '[') squareDepth += 1;
+    else if (character === ']') squareDepth -= 1;
+    else if (character === '{') curlyDepth += 1;
+    else if (character === '}') curlyDepth -= 1;
+    else if (character === ',' && roundDepth === 0 && squareDepth === 0 && curlyDepth === 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function chainedMethodNames(code: string, call: CallExpression): string[] {
+  const methods: string[] = [];
+  let cursor = call.closeParenthesis + 1;
+
+  while (cursor < code.length) {
+    while (/\s/.test(code[cursor] ?? '')) cursor += 1;
+    if (code[cursor] === '?' && code[cursor + 1] === '.') cursor += 1;
+    if (code[cursor] !== '.') break;
+    cursor += 1;
+
+    const methodStart = cursor;
+    while (/[A-Za-z0-9_$]/.test(code[cursor] ?? '')) cursor += 1;
+    const method = code.slice(methodStart, cursor);
+    while (/\s/.test(code[cursor] ?? '')) cursor += 1;
+    if (!method || code[cursor] !== '(') break;
+
+    const closeParenthesis = findClosingParenthesis(code, cursor);
+    if (closeParenthesis === undefined) break;
+    methods.push(method);
+    cursor = closeParenthesis + 1;
+  }
+
+  return methods;
+}
+
+function indexedId(base: string, index: number): string {
+  return index === 0 ? base : `${base}-${index + 1}`;
 }
 
 function finding(
   id: string,
   title: string,
   evidence: string,
-  needle: string,
+  index: number,
   risk: Omit<ForecastRisk, 'id' | 'signalIds'>,
 ): Finding {
   return {
-    signal: { id: `signal-${id}`, title, evidence, needle },
+    signal: { id: `signal-${id}`, title, evidence, index },
     risk: { ...risk, id: `risk-${id}`, signalIds: [`signal-${id}`] },
   };
 }
@@ -42,36 +181,41 @@ function finding(
 function inspectCode(code: string): Finding[] {
   const findings: Finding[] = [];
 
-  if (/useEffect\s*\([\s\S]*?\}\s*\)\s*;?/m.test(code) && !/\}\s*,\s*\[[^\]]*\]\s*\)/m.test(code)) {
-    findings.push(
-      finding(
-        'effect-loop',
-        'Effect has no dependency boundary',
-        'A useEffect call does not include a dependency array.',
-        'useEffect',
-        {
-          title: 'Request and render loops may start immediately',
-          summary:
-            'An unbounded effect runs after every render and can trigger another state update.',
-          category: 'reliability',
-          level: 'critical',
-          horizon: 'now',
-          confidence: 'high',
-          impact: 'The UI may thrash while backend traffic grows without additional users.',
-          recommendation:
-            'Declare precise dependencies and separate user-triggered requests from render synchronization.',
-        },
-      ),
-    );
-  }
+  let missingEffectCount = 0;
+  findCalls(code, 'useEffect').forEach((effect) => {
+    if (!hasTopLevelArgumentSeparator(code, effect)) {
+      findings.push(
+        finding(
+          indexedId('effect-loop', missingEffectCount),
+          'Effect has no dependency boundary',
+          'A useEffect call does not include a dependency array.',
+          effect.start,
+          {
+            title: 'Request and render loops may start immediately',
+            summary:
+              'An unbounded effect runs after every render and can trigger another state update.',
+            category: 'reliability',
+            level: 'critical',
+            horizon: 'now',
+            confidence: 'high',
+            impact: 'The UI may thrash while backend traffic grows without additional users.',
+            recommendation:
+              'Declare precise dependencies and separate user-triggered requests from render synchronization.',
+          },
+        ),
+      );
+      missingEffectCount += 1;
+    }
+  });
 
-  if (/key\s*=\s*\{\s*Math\.random\(\)\s*\}/.test(code)) {
+  const unstableKey = /key\s*=\s*\{\s*Math\.random\(\)\s*\}/.exec(code);
+  if (unstableKey) {
     findings.push(
       finding(
         'unstable-key',
         'List identity changes on every render',
         'Math.random() is used as a React key.',
-        'Math.random()',
+        unstableKey.index,
         {
           title: 'Large result sets may feel unstable',
           summary: 'Generated keys force React to remount every row whenever the list renders.',
@@ -86,13 +230,14 @@ function inspectCode(code: string): Finding[] {
     );
   }
 
-  if (/<div[^>]*onClick\s*=/.test(code)) {
+  const clickableDiv = /<div[^>]*onClick\s*=/.exec(code);
+  if (clickableDiv) {
     findings.push(
       finding(
         'clickable-div',
         'Click target has no native semantics',
         'A div handles click input without button behavior.',
-        '<div onClick',
+        clickableDiv.index,
         {
           title: 'Keyboard users may be blocked',
           summary: 'The action cannot be reliably focused or activated from a keyboard.',
@@ -108,13 +253,14 @@ function inspectCode(code: string): Finding[] {
     );
   }
 
-  if (/<img\b(?![^>]*\balt=)[^>]*>/i.test(code)) {
+  const imageWithoutAlt = /<img\b(?![^>]*\balt=)[^>]*>/i.exec(code);
+  if (imageWithoutAlt) {
     findings.push(
       finding(
         'image-alt',
         'Image has no text alternative',
         'An img element is missing an alt attribute.',
-        '<img',
+        imageWithoutAlt.index,
         {
           title: 'Screen-reader context may be incomplete',
           summary: 'Users who cannot see the image receive no equivalent description.',
@@ -130,61 +276,80 @@ function inspectCode(code: string): Finding[] {
     );
   }
 
-  if (
-    /<input\b/i.test(code) &&
-    !/<label\b/i.test(code) &&
-    !/<input[^>]*(aria-label|aria-labelledby)=/i.test(code)
-  ) {
-    findings.push(
-      finding(
-        'input-label',
-        'Input has no accessible name',
-        'An input is present without an associated label.',
-        '<input',
-        {
-          title: 'Search intent may be unclear to assistive technology',
-          summary:
-            'Placeholder or surrounding layout alone does not create a reliable accessible name.',
-          category: 'accessibility',
-          level: 'medium',
-          horizon: 'now',
-          confidence: 'high',
-          impact: 'Screen-reader and voice-control users may not know what the field does.',
-          recommendation: 'Associate a visible label or an accurate aria-label with the input.',
-        },
-      ),
-    );
-  }
+  const labelledInputIds = new Set(
+    [...code.matchAll(/<label\b[^>]*(?:htmlFor|for)\s*=\s*["']([^"']+)["'][^>]*>/gi)]
+      .map((match) => match[1])
+      .filter((id): id is string => Boolean(id)),
+  );
+  let unlabelledInputCount = 0;
+  [...code.matchAll(/<input\b[^>]*>/gi)].forEach((input) => {
+    const inputMarkup = input[0];
+    const inputId = /\bid\s*=\s*["']([^"']+)["']/i.exec(inputMarkup)?.[1];
+    const hasAccessibleName = /\b(?:aria-label|aria-labelledby)\s*=/i.test(inputMarkup);
+    const beforeInput = code.slice(0, input.index).toLowerCase();
+    const wrappedByLabel =
+      beforeInput.lastIndexOf('<label') > beforeInput.lastIndexOf('</label>') &&
+      code.toLowerCase().indexOf('</label>', input.index) >= 0;
+    const explicitlyLabelled = Boolean(inputId && labelledInputIds.has(inputId));
 
-  if (/\bfetch\s*\(/.test(code) && !/\.catch\s*\(|\bcatch\s*\(/.test(code)) {
-    findings.push(
-      finding(
-        'fetch-errors',
-        'Network failure is not handled',
-        'A fetch call has no visible rejection path.',
-        'fetch(',
-        {
-          title: 'Temporary API failures may become blank screens',
-          summary: 'Rejected requests have no user-facing recovery or diagnostic state.',
-          category: 'reliability',
-          level: 'high',
-          horizon: '7-days',
-          confidence: 'high',
-          impact: 'Users may retry blindly while support teams lack useful failure context.',
-          recommendation:
-            'Handle failures explicitly and render retryable loading, empty, and error states.',
-        },
-      ),
-    );
-  }
+    if (!hasAccessibleName && !wrappedByLabel && !explicitlyLabelled) {
+      findings.push(
+        finding(
+          indexedId('input-label', unlabelledInputCount),
+          'Input has no accessible name',
+          'An input is present without an associated label.',
+          input.index,
+          {
+            title: 'Search intent may be unclear to assistive technology',
+            summary:
+              'Placeholder or surrounding layout alone does not create a reliable accessible name.',
+            category: 'accessibility',
+            level: 'medium',
+            horizon: 'now',
+            confidence: 'high',
+            impact: 'Screen-reader and voice-control users may not know what the field does.',
+            recommendation: 'Associate a visible label or an accurate aria-label with the input.',
+          },
+        ),
+      );
+      unlabelledInputCount += 1;
+    }
+  });
 
-  if (/dangerouslySetInnerHTML/.test(code)) {
+  let unhandledFetchCount = 0;
+  findCalls(code, 'fetch').forEach((fetchCall) => {
+    if (!chainedMethodNames(code, fetchCall).includes('catch')) {
+      findings.push(
+        finding(
+          indexedId('fetch-errors', unhandledFetchCount),
+          'Network failure is not handled',
+          'A fetch call has no visible rejection path.',
+          fetchCall.start,
+          {
+            title: 'Temporary API failures may become blank screens',
+            summary: 'Rejected requests have no user-facing recovery or diagnostic state.',
+            category: 'reliability',
+            level: 'high',
+            horizon: '7-days',
+            confidence: 'high',
+            impact: 'Users may retry blindly while support teams lack useful failure context.',
+            recommendation:
+              'Handle failures explicitly and render retryable loading, empty, and error states.',
+          },
+        ),
+      );
+      unhandledFetchCount += 1;
+    }
+  });
+
+  const rawHtml = /dangerouslySetInnerHTML/.exec(code);
+  if (rawHtml) {
     findings.push(
       finding(
         'raw-html',
         'Raw HTML reaches the render tree',
         'dangerouslySetInnerHTML appears in the component.',
-        'dangerouslySetInnerHTML',
+        rawHtml.index,
         {
           title: 'Untrusted content could become an injection path',
           summary:
@@ -201,13 +366,23 @@ function inspectCode(code: string): Finding[] {
     );
   }
 
-  if (/\bany\b/.test(code) || /useState\s*\(\s*\[\s*\]\s*\)/.test(code)) {
+  const broadType = /\bany\b/.exec(code);
+  const implicitArrayState = /useState\s*\(\s*\[\s*\]\s*\)/.exec(code);
+  const weakTyping =
+    broadType && implicitArrayState
+      ? broadType.index <= implicitArrayState.index
+        ? broadType
+        : implicitArrayState
+      : (broadType ?? implicitArrayState);
+  if (weakTyping) {
     findings.push(
       finding(
         'weak-types',
         'Data shape is not enforced',
-        'State or values rely on implicit or broad typing.',
-        'useState([])',
+        broadType && weakTyping.index === broadType.index
+          ? 'The any type bypasses compile-time data-shape checks.'
+          : 'State relies on an implicitly typed empty array.',
+        weakTyping.index,
         {
           title: 'API shape changes may cause late regressions',
           summary:
@@ -236,7 +411,7 @@ function scenarioFinding(scenario: string, code: string): Finding | null {
       'scenario-scale',
       'Growth scenario selected',
       `What-if scenario: “${scenario}”`,
-      code.includes('fetch(') ? 'fetch(' : code.slice(0, 12),
+      Math.max(0, code.indexOf('fetch(')),
       {
         title: 'Current request behavior may amplify traffic growth',
         summary:
@@ -257,7 +432,7 @@ function scenarioFinding(scenario: string, code: string): Finding | null {
       'scenario-latency',
       'Dependency degradation scenario selected',
       `What-if scenario: “${scenario}”`,
-      code.includes('fetch(') ? 'fetch(' : code.slice(0, 12),
+      Math.max(0, code.indexOf('fetch(')),
       {
         title: 'Slow dependencies may trap the interface in an ambiguous state',
         summary:
@@ -279,7 +454,7 @@ function scenarioFinding(scenario: string, code: string): Finding | null {
       'scenario-volume',
       'Large data-volume scenario selected',
       `What-if scenario: “${scenario}”`,
-      code.includes('.map(') ? '.map(' : code.slice(0, 12),
+      Math.max(0, code.indexOf('.map(')),
       {
         title: 'Rendering cost may grow with the full dataset',
         summary:
@@ -299,7 +474,7 @@ function scenarioFinding(scenario: string, code: string): Finding | null {
     'scenario-change',
     'Custom deployment scenario selected',
     `What-if scenario: “${scenario}”`,
-    code.slice(0, 12),
+    0,
     {
       title: 'The proposed change needs a targeted production check',
       summary:
@@ -331,7 +506,7 @@ export function createDemoForecast(input: ForecastRequest, provider: string): En
     id: signal.id,
     title: signal.title,
     evidence: signal.evidence,
-    line: lineOf(input.code, signal.needle),
+    line: lineOf(input.code, signal.index),
   }));
   const risks = findings
     .map(({ risk }) => risk)

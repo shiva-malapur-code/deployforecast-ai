@@ -143,27 +143,33 @@ export function ForecastDashboard({
           <TriangleAlert className="size-5 text-amber-300" />
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {topRisks.map((risk) => (
-            <div
-              key={risk.id}
-              className="flex items-start gap-2.5 rounded-lg border border-border bg-black/10 p-3"
-            >
-              <span
-                className={cn(
-                  'mt-1 size-2 shrink-0 rounded-full',
-                  risk.level === 'critical' || risk.level === 'high'
-                    ? 'bg-orange-300'
-                    : 'bg-amber-200',
-                )}
-              />
-              <div>
-                <p className="text-sm font-medium leading-5 text-white">{risk.title}</p>
-                <p className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {horizonLabel[risk.horizon]} · {risk.category}
-                </p>
+          {topRisks.length ? (
+            topRisks.map((risk) => (
+              <div
+                key={risk.id}
+                className="flex items-start gap-2.5 rounded-lg border border-border bg-black/10 p-3"
+              >
+                <span
+                  className={cn(
+                    'mt-1 size-2 shrink-0 rounded-full',
+                    risk.level === 'critical' || risk.level === 'high'
+                      ? 'bg-orange-300'
+                      : 'bg-amber-200',
+                  )}
+                />
+                <div>
+                  <p className="text-sm font-medium leading-5 text-white">{risk.title}</p>
+                  <p className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {horizonLabel[risk.horizon]} · {risk.category}
+                  </p>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <EmptyState className="sm:col-span-2">
+              No priority risks were detected by the current inspection rules.
+            </EmptyState>
+          )}
         </div>
       </Card>
 
@@ -172,10 +178,11 @@ export function ForecastDashboard({
           Forecast summary
         </p>
         <p className="mt-3 text-sm leading-6 text-[#c6d3cf]">{forecast.summary}</p>
-        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-4 text-xs sm:grid-cols-5">
           <Score label="Reliability" value={forecast.scores.reliability} />
           <Score label="Performance" value={forecast.scores.performance} />
           <Score label="Accessibility" value={forecast.scores.accessibility} />
+          <Score label="Security" value={forecast.scores.security} />
           <Score label="Maintainability" value={forecast.scores.maintainability} />
         </div>
       </Card>
@@ -283,12 +290,18 @@ export function ForecastDashboard({
       <Card className="p-5">
         <h3 className="font-semibold text-white">Prevention plan</h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {forecast.preventionPlan.map((step) => (
-            <div key={step} className="flex gap-2.5 text-sm leading-5 text-muted-foreground">
-              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
-              {step}
-            </div>
-          ))}
+          {forecast.preventionPlan.length ? (
+            forecast.preventionPlan.map((step) => (
+              <div key={step} className="flex gap-2.5 text-sm leading-5 text-muted-foreground">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                {step}
+              </div>
+            ))
+          ) : (
+            <EmptyState className="sm:col-span-2">
+              No preventive actions are required from the current static findings.
+            </EmptyState>
+          )}
         </div>
       </Card>
       <p className="px-2 text-xs leading-5 text-muted-foreground">{forecast.disclaimer}</p>
@@ -315,21 +328,24 @@ function ForecastTimeline({ forecast }: { forecast: EngineeringForecast }) {
         <div className="ml-3 border-l border-primary/25 pb-6 pl-6 pt-3">
           <p className="text-sm font-semibold text-white">Inspector found</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {forecast.signals.map((signal) => (
-              <span
-                key={signal.id}
-                className="rounded-full border border-border bg-white/[0.025] px-3 py-1.5 text-xs text-[#c6d3cf]"
-                title={signal.evidence}
-              >
-                {signal.title}
-              </span>
-            ))}
+            {forecast.signals.length ? (
+              forecast.signals.map((signal) => (
+                <span
+                  key={signal.id}
+                  className="rounded-full border border-border bg-white/[0.025] px-3 py-1.5 text-xs text-[#c6d3cf]"
+                  title={signal.evidence}
+                >
+                  {signal.title}
+                </span>
+              ))
+            ) : (
+              <EmptyState>No inspector findings matched the current static rules.</EmptyState>
+            )}
           </div>
         </div>
 
         {timelineHorizons.map((horizon, index) => {
           const risks = forecast.risks.filter((risk) => risk.horizon === horizon);
-          if (!risks.length) return null;
 
           return (
             <div key={horizon}>
@@ -341,26 +357,33 @@ function ForecastTimeline({ forecast }: { forecast: EngineeringForecast }) {
                 )}
               >
                 <div className="space-y-4">
-                  {risks.map((risk) => (
-                    <div key={risk.id} className="rounded-lg border border-border bg-black/10 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-white">{risk.title}</h3>
-                        <span
-                          className={cn(
-                            'rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest',
-                            riskStyle[risk.level],
-                          )}
-                        >
-                          {risk.confidence} confidence
-                        </span>
+                  {risks.length ? (
+                    risks.map((risk) => (
+                      <div
+                        key={risk.id}
+                        className="rounded-lg border border-border bg-black/10 p-4"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-white">{risk.title}</h3>
+                          <span
+                            className={cn(
+                              'rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest',
+                              riskStyle[risk.level],
+                            )}
+                          >
+                            {risk.confidence} confidence
+                          </span>
+                        </div>
+                        <CausalStep label="Why it may happen" text={risk.summary} />
+                        <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
+                        <CausalStep label="Future impact" text={risk.impact} />
+                        <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
+                        <CausalStep label="Prevent it" text={risk.recommendation} highlighted />
                       </div>
-                      <CausalStep label="Why it may happen" text={risk.summary} />
-                      <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
-                      <CausalStep label="Future impact" text={risk.impact} />
-                      <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
-                      <CausalStep label="Prevent it" text={risk.recommendation} highlighted />
-                    </div>
-                  ))}
+                    ))
+                  ) : (
+                    <EmptyState>No risks are forecast for this horizon.</EmptyState>
+                  )}
                 </div>
               </div>
             </div>
@@ -368,6 +391,19 @@ function ForecastTimeline({ forecast }: { forecast: EngineeringForecast }) {
         })}
       </div>
     </Card>
+  );
+}
+
+function EmptyState({ children, className }: { children: React.ReactNode; className?: string }) {
+  return (
+    <p
+      className={cn(
+        'w-full rounded-lg border border-dashed border-border bg-white/[0.015] p-3 text-xs leading-5 text-muted-foreground',
+        className,
+      )}
+    >
+      {children}
+    </p>
   );
 }
 

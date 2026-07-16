@@ -5,6 +5,23 @@ export function downloadForecastReport(
   sourceCode: string,
   scenario: string,
 ) {
+  const report = createForecastReport(forecast, sourceCode, scenario);
+  const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `deployforecast-${forecast.id.slice(0, 8)}.md`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+export function createForecastReport(
+  forecast: EngineeringForecast,
+  sourceCode: string,
+  scenario: string,
+): string {
   const scores = Object.entries(forecast.scores)
     .map(([name, score]) => `- ${name[0]?.toUpperCase()}${name.slice(1)}: ${score}/100`)
     .join('\n');
@@ -18,7 +35,7 @@ export function downloadForecastReport(
     })
     .join('\n\n');
 
-  const report = `# DeployForecast AI Engineering Forecast
+  return `# DeployForecast AI Engineering Forecast
 
 Generated: ${new Date(forecast.generatedAt).toLocaleString()}
 Provider: ${forecast.provider}
@@ -47,14 +64,4 @@ ${sourceCode}
 
 > ${forecast.disclaimer}
 `;
-
-  const blob = new Blob([report], { type: 'text/markdown;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = url;
-  anchor.download = `deployforecast-${forecast.id.slice(0, 8)}.md`;
-  document.body.append(anchor);
-  anchor.click();
-  anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }

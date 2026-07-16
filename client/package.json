@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "TSX_TSCONFIG_PATH=tsconfig.app.json node --import tsx --test test/*.test.ts test/*.test.tsx",
     "typecheck": "tsc -b --noEmit"
   },
   "dependencies": {

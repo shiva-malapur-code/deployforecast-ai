@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { EngineeringForecast } from '@deploy-forecast/shared';
 import {
   ArrowDown,
   ArrowRight,
@@ -16,7 +15,7 @@ import { ForecastDashboard } from '@/components/forecast-dashboard';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sampleCode } from '@/data/sample-code';
-import { createForecast } from '@/services/forecast-api';
+import { submitForecast, type ForecastSubmission } from '@/services/forecast-submission';
 import { downloadForecastReport } from '@/utils/report-generator';
 
 const scenarioSuggestions = [
@@ -27,7 +26,7 @@ const scenarioSuggestions = [
 
 export default function App() {
   const [code, setCode] = useState(sampleCode);
-  const [forecast, setForecast] = useState<EngineeringForecast | null>(null);
+  const [submission, setSubmission] = useState<ForecastSubmission | null>(null);
   const [scenario, setScenario] = useState('Traffic grows 10×');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +37,8 @@ export default function App() {
     document.querySelector('#workspace')?.scrollIntoView({ behavior: 'smooth' });
 
     try {
-      setForecast(
-        await createForecast({
+      setSubmission(
+        await submitForecast({
           code,
           language: 'typescript',
           framework: 'react',
@@ -219,10 +218,16 @@ export default function App() {
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,.95fr)]">
               <CodeEditorPlaceholder code={code} onChange={setCode} />
-              {forecast ? (
+              {submission ? (
                 <ForecastDashboard
-                  forecast={forecast}
-                  onDownload={() => downloadForecastReport(forecast, code, scenario)}
+                  forecast={submission.forecast}
+                  onDownload={() =>
+                    downloadForecastReport(
+                      submission.forecast,
+                      submission.request.code,
+                      submission.request.scenario ?? '',
+                    )
+                  }
                 />
               ) : (
                 <Card className="grid min-h-[480px] place-items-center border-dashed p-8 text-center">
