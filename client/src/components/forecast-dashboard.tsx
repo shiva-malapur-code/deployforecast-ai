@@ -8,12 +8,14 @@ import type {
 import {
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Download,
   Eye,
   Gauge,
   ShieldAlert,
   Sparkles,
+  TriangleAlert,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -52,6 +54,13 @@ export function ForecastDashboard({
   const [category, setCategory] = useState<(typeof categories)[number]>('all');
   const [horizon, setHorizon] = useState<'all' | ForecastHorizon>('all');
   const confidence = useMemo(() => getOverallConfidence(forecast), [forecast]);
+  const topRisks = useMemo(
+    () =>
+      [...forecast.risks]
+        .sort((left, right) => riskWeight[right.level] - riskWeight[left.level])
+        .slice(0, 4),
+    [forecast.risks],
+  );
   const filteredRisks = useMemo(
     () =>
       forecast.risks.filter(
@@ -122,6 +131,43 @@ export function ForecastDashboard({
       </Card>
 
       <Card className="p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              Top future risks
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              The most important outcomes to prevent before release
+            </p>
+          </div>
+          <TriangleAlert className="size-5 text-amber-300" />
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {topRisks.map((risk) => (
+            <div
+              key={risk.id}
+              className="flex items-start gap-2.5 rounded-lg border border-border bg-black/10 p-3"
+            >
+              <span
+                className={cn(
+                  'mt-1 size-2 shrink-0 rounded-full',
+                  risk.level === 'critical' || risk.level === 'high'
+                    ? 'bg-orange-300'
+                    : 'bg-amber-200',
+                )}
+              />
+              <div>
+                <p className="text-sm font-medium leading-5 text-white">{risk.title}</p>
+                <p className="mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {horizonLabel[risk.horizon]} · {risk.category}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      <Card className="p-5">
         <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
           Forecast summary
         </p>
@@ -134,7 +180,17 @@ export function ForecastDashboard({
         </div>
       </Card>
 
+      <ForecastTimeline forecast={forecast} />
+
       <Card className="p-4">
+        <div className="mb-4">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            Risk explorer
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Inspect the evidence and prevention action behind each forecast
+          </p>
+        </div>
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap gap-2" aria-label="Filter by category">
             {categories.map((item) => (
@@ -240,6 +296,114 @@ export function ForecastDashboard({
   );
 }
 
+const timelineHorizons: ForecastHorizon[] = ['7-days', '30-days', '90-days'];
+
+function ForecastTimeline({ forecast }: { forecast: EngineeringForecast }) {
+  return (
+    <Card className="overflow-hidden">
+      <div className="border-b border-border px-5 py-4">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+          Forecast timeline
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          A causal story from today&apos;s signals to tomorrow&apos;s production impact
+        </p>
+      </div>
+
+      <div className="p-5">
+        <TimelineMarker label="Today" />
+        <div className="ml-3 border-l border-primary/25 pb-6 pl-6 pt-3">
+          <p className="text-sm font-semibold text-white">Inspector found</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {forecast.signals.map((signal) => (
+              <span
+                key={signal.id}
+                className="rounded-full border border-border bg-white/[0.025] px-3 py-1.5 text-xs text-[#c6d3cf]"
+                title={signal.evidence}
+              >
+                {signal.title}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {timelineHorizons.map((horizon, index) => {
+          const risks = forecast.risks.filter((risk) => risk.horizon === horizon);
+          if (!risks.length) return null;
+
+          return (
+            <div key={horizon}>
+              <TimelineMarker label={horizonLabel[horizon]} />
+              <div
+                className={cn(
+                  'ml-3 pl-6 pt-3',
+                  index < timelineHorizons.length - 1 && 'border-l border-primary/25 pb-7',
+                )}
+              >
+                <div className="space-y-4">
+                  {risks.map((risk) => (
+                    <div key={risk.id} className="rounded-lg border border-border bg-black/10 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-white">{risk.title}</h3>
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest',
+                            riskStyle[risk.level],
+                          )}
+                        >
+                          {risk.confidence} confidence
+                        </span>
+                      </div>
+                      <CausalStep label="Why it may happen" text={risk.summary} />
+                      <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
+                      <CausalStep label="Future impact" text={risk.impact} />
+                      <ChevronDown className="mx-auto my-1 size-4 text-primary/60" />
+                      <CausalStep label="Prevent it" text={risk.recommendation} highlighted />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function TimelineMarker({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="size-6 rounded-full border-4 border-[#0d1715] bg-primary shadow-[0_0_0_1px_rgba(65,232,176,.3)]" />
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">{label}</p>
+    </div>
+  );
+}
+
+function CausalStep({
+  label,
+  text,
+  highlighted = false,
+}: {
+  label: string;
+  text: string;
+  highlighted?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'rounded-md border border-border px-3 py-2.5',
+        highlighted ? 'border-primary/25 bg-primary/[0.06]' : 'bg-white/[0.02]',
+      )}
+    >
+      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-1 text-xs leading-5 text-[#c6d3cf]">{text}</p>
+    </div>
+  );
+}
+
 function FilterButton({
   active,
   onClick,
@@ -316,3 +480,10 @@ function getOverallConfidence(forecast: EngineeringForecast): 'low' | 'medium' |
   if (average >= 1.5) return 'medium';
   return 'low';
 }
+
+const riskWeight: Record<RiskLevel, number> = {
+  low: 1,
+  medium: 2,
+  high: 3,
+  critical: 4,
+};

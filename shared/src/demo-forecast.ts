@@ -364,7 +364,7 @@ export function createDemoForecast(input: ForecastRequest, provider: string): En
       ? `${signals.length} observable code signals produced ${risks.length} calibrated production risks.${scenarioSummary}`
       : 'No high-confidence production risks were detected by the current inspection rules. Runtime validation is still recommended.',
     deploymentRisk,
-    scores: { health, reliability, performance, accessibility, maintainability },
+    scores: { health, reliability, performance, accessibility, security, maintainability },
     signals,
     risks,
     preventionPlan: [...new Set(risks.map((risk) => risk.recommendation))].slice(0, 5),

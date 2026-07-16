@@ -89,8 +89,8 @@ export default function App() {
               <CloudSun className="size-3.5" /> AI engineering forecast
             </div>
             <h1 className="mx-auto mt-7 max-w-4xl text-balance text-5xl font-semibold tracking-[-0.045em] text-white sm:text-6xl lg:text-7xl">
-              Know what happens after you deploy.{' '}
-              <span className="text-primary">Before you deploy.</span>
+              Can your app survive production?{' '}
+              <span className="text-primary">Find out before you deploy.</span>
             </h1>
             <p className="mx-auto mt-6 max-w-2xl text-pretty text-base leading-7 text-muted-foreground sm:text-lg">
               DeployForecast turns code signals into a time-based view of likely production risks,
@@ -119,24 +119,32 @@ export default function App() {
         </section>
 
         <section id="how-it-works" className="border-b border-border px-5 py-16 lg:px-8">
+          <div className="mx-auto mb-8 max-w-7xl">
+            <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">
+              Three agents. One forecast.
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
+              From code signal to prevention plan
+            </h2>
+          </div>
           <div className="mx-auto grid max-w-7xl gap-4 md:grid-cols-3">
             <Feature
               icon={Radar}
-              number="01"
-              title="Inspect real signals"
-              text="Trace concrete patterns in code instead of inventing precise metrics."
+              number="AGENT 01"
+              title="Inspector"
+              text="Finds React bugs, accessibility gaps, performance bottlenecks, security signals, and maintainability risks."
             />
             <Feature
               icon={CloudSun}
-              number="02"
-              title="Forecast likely impact"
-              text="Map each signal to a calibrated now, 7-day, 30-day, or 90-day risk."
+              number="AGENT 02"
+              title="Oracle"
+              text="Turns observable signals into calibrated now, 7-day, 30-day, and 90-day production forecasts."
             />
             <Feature
               icon={ShieldCheck}
-              number="03"
-              title="Prevent the failure"
-              text="Turn every forecast into an evidence-linked, actionable prevention plan."
+              number="AGENT 03"
+              title="Prevention"
+              text="Builds an evidence-linked action plan with targeted fixes, test guidance, and migration steps."
             />
           </div>
         </section>
@@ -149,7 +157,7 @@ export default function App() {
                   Forecast lab
                 </p>
                 <h2 className="mt-3 text-3xl font-semibold tracking-tight text-white">
-                  Can this code survive production?
+                  Run the engineering forecast
                 </h2>
                 <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                   Edit the sample, choose a production scenario, and trace each forecast back to
