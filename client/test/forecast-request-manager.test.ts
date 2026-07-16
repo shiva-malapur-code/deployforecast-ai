@@ -71,3 +71,62 @@ test('allows a failed recoverable request to be retried', async () => {
   assert.equal(retried.status, 'success');
   assert.equal(calls, 2);
 });
+
+test('treats the same code with a changed scenario as a new request and restores only the latest result', async () => {
+  const pending = new Map<string, (forecast: EngineeringForecast) => void>();
+  const manager = new ForecastRequestManager(
+    (request) => new Promise((resolve) => pending.set(request.scenario ?? 'baseline', resolve)),
+  );
+  const baselineScenario = { ...firstRequest, scenario: 'Traffic grows' };
+  const changedScenario = { ...firstRequest, scenario: 'The API becomes slow' };
+
+  const first = manager.start(baselineScenario);
+  const second = manager.start(changedScenario);
+  pending.get('Traffic grows')?.(createDemoForecast(baselineScenario, 'test'));
+  pending.get('The API becomes slow')?.(createDemoForecast(changedScenario, 'test'));
+
+  assert.equal((await first).status, 'stale');
+  const latest = await second;
+  assert.equal(latest.status, 'success');
+  if (latest.status === 'success') {
+    assert.equal(latest.submission.request.scenario, 'The API becomes slow');
+  }
+});
+
+test('ignores a late rejection from an aborted stale request', async () => {
+  let rejectFirst: ((error: Error) => void) | undefined;
+  const manager = new ForecastRequestManager((request) => {
+    if (request.code === firstRequest.code) {
+      return new Promise((_resolve, reject) => {
+        rejectFirst = reject;
+      });
+    }
+    return Promise.resolve(createDemoForecast(request, 'test'));
+  });
+
+  const first = manager.start(firstRequest);
+  const second = manager.start(secondRequest);
+  rejectFirst?.(new Error('late stale failure'));
+
+  assert.equal((await first).status, 'stale');
+  assert.equal((await second).status, 'success');
+});
+
+test('manual abort clears the active request and returns a stale outcome', async () => {
+  const manager = new ForecastRequestManager(
+    (_request, options) =>
+      new Promise((_resolve, reject) => {
+        options?.signal?.addEventListener(
+          'abort',
+          () => reject(new DOMException('Aborted', 'AbortError')),
+          { once: true },
+        );
+      }),
+  );
+
+  const pending = manager.start(firstRequest);
+  manager.abort();
+
+  assert.equal((await pending).status, 'stale');
+  assert.equal(manager.isRunning, false);
+});

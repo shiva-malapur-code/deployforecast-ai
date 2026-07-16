@@ -31,3 +31,35 @@ test('includes scenario comparison, assumptions, limitations, and baseline in th
   assert.match(report, /### Preserved baseline/);
   assert.match(report, /increased/);
 });
+
+test('includes evidence lines, prevention actions, and analyzed source', () => {
+  const code = `export function Clear() {
+  return <div onClick={() => clear()}>Clear</div>;
+}`;
+  const forecast = createDemoForecast({ code, language: 'typescript', framework: 'react' }, 'test');
+  const report = createForecastReport(forecast, code, '');
+
+  assert.match(report, /line 2/);
+  assert.match(report, /Use a semantic button/);
+  assert.match(report, /## Prevention plan/);
+  assert.match(report, /```tsx[\s\S]*export function Clear/);
+  assert.match(report, /Scenario: Standard production deployment/);
+});
+
+test('renders a safe no-risks report fallback with every score', () => {
+  const code = 'export function Button() { return <button>Save</button>; }';
+  const forecast = createDemoForecast({ code, language: 'typescript', framework: 'react' }, 'test');
+  const report = createForecastReport(forecast, code, '');
+
+  for (const score of [
+    'Health',
+    'Reliability',
+    'Performance',
+    'Accessibility',
+    'Security',
+    'Maintainability',
+  ]) {
+    assert.match(report, new RegExp(`- ${score}: 100/100`));
+  }
+  assert.match(report, /No risks matched the current inspection rules/);
+});

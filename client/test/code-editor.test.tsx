@@ -77,3 +77,20 @@ test('renders an accessible loading fallback before Monaco is ready', () => {
   assert.match(markup, /Load sample/);
   assert.match(markup, /Reset editor/);
 });
+
+test('keeps source-length validation visible at both invalid boundaries', () => {
+  const renderEditor = (code: string) =>
+    renderToStaticMarkup(
+      <CodeEditor
+        code={code}
+        language="typescript"
+        sampleCode={sampleCode}
+        onChange={() => undefined}
+        onLanguageChange={() => undefined}
+      />,
+    );
+
+  assert.match(renderEditor('short'), /Add at least 20 characters/);
+  assert.match(renderEditor('x'.repeat(50_001)), /Code exceeds the 50,000 character limit/);
+  assert.match(renderEditor(sampleCode), /Code length is valid for forecasting/);
+});

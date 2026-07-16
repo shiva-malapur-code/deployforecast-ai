@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createDemoForecast } from '@deploy-forecast/shared';
+import { createApiError, createDemoForecast } from '@deploy-forecast/shared';
 import { createForecast, ForecastApiError } from '../src/services/forecast-api.ts';
 
 const request = {
@@ -55,6 +55,50 @@ test('rejects a successful response that omits the requested scenario comparison
     }),
     {
       message: 'The forecast service returned an invalid scenario comparison. Please try again.',
+    },
+  );
+});
+
+test('maps a shared API error response without exposing provider internals', async () => {
+  await assert.rejects(
+    createForecast(request, {
+      fetchImpl: async () =>
+        Response.json(createApiError('RATE_LIMITED', 'request-123'), {
+          status: 429,
+          headers: { 'X-Request-ID': 'request-123' },
+        }),
+    }),
+    (error) => {
+      assert.equal(error instanceof ForecastApiError, true);
+      assert.equal(error.code, 'RATE_LIMITED');
+      assert.equal(error.requestId, 'request-123');
+      assert.equal(error.recoverable, true);
+      assert.doesNotMatch(error.message, /stack|ollama|token/i);
+      return true;
+    },
+  );
+});
+
+test('maps network and non-contract server failures to safe client errors', async () => {
+  await assert.rejects(
+    createForecast(request, {
+      fetchImpl: async () => {
+        throw new Error('socket details that must stay private');
+      },
+    }),
+    {
+      code: 'PROVIDER_UNAVAILABLE',
+      message: 'Unable to reach the forecast service. Check your connection and try again.',
+    },
+  );
+
+  await assert.rejects(
+    createForecast(request, {
+      fetchImpl: async () => new Response('proxy failure', { status: 502 }),
+    }),
+    {
+      code: 'INTERNAL_ERROR',
+      message: 'The forecast service returned an unexpected error. Please try again.',
     },
   );
 });

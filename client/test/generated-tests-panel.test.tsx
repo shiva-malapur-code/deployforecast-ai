@@ -7,7 +7,10 @@ import {
   type ForecastRequest,
 } from '@deploy-forecast/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { GeneratedTestsContent } from '../src/components/generated-tests-panel.tsx';
+import {
+  GeneratedTestsContent,
+  GeneratedTestsPanel,
+} from '../src/components/generated-tests-panel.tsx';
 import { getGeneratedTestsFilename } from '../src/utils/generated-tests-download.ts';
 
 const request: ForecastRequest = {
@@ -58,4 +61,15 @@ test('renders a purpose-built empty state when no test code is returned', () => 
 test('uses the correct generated-test extension for each language', () => {
   assert.equal(getGeneratedTestsFilename('typescript'), 'deployforecast-generated.test.tsx');
   assert.equal(getGeneratedTestsFilename('javascript'), 'deployforecast-generated.test.jsx');
+});
+
+test('renders the generated-tests action without generating automatically', () => {
+  const forecast = createDemoForecast(request, 'test');
+  const markup = renderToStaticMarkup(
+    <GeneratedTestsPanel submission={{ request: Object.freeze({ ...request }), forecast }} />,
+  );
+
+  assert.match(markup, /Generate forecast-linked tests/);
+  assert.match(markup, /Generate Tests/);
+  assert.doesNotMatch(markup, /Generated test suite/);
 });

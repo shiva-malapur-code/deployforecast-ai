@@ -18,6 +18,34 @@ const unusedAssets = {
   fetch: async () => new Response('Not found', { status: 404 }),
 };
 
+test('serves worker health with a request ID', async () => {
+  const response = await createWorkerHandler().fetch(
+    new Request('https://example.test/api/health'),
+    { ASSETS: unusedAssets },
+  );
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: 'ok' });
+  assert.equal(typeof response.headers.get('X-Request-ID'), 'string');
+});
+
+test('serves a validated multi-risk scenario forecast from the hosted endpoint', async () => {
+  const scenario = 'Traffic grows while the API becomes slow and the catalog reaches 100k items';
+  const response = await createWorkerHandler().fetch(
+    new Request('https://example.test/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...requestBody, scenario }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.scenario.input, scenario);
+  assert.ok(payload.scenario.comparisons.filter((item) => item.status === 'new').length > 1);
+});
+
 test('returns a controlled error for a malformed hosted forecast response', async () => {
   const worker = createWorkerHandler(async () => ({ summary: 'Malformed output' }));
   const response = await worker.fetch(
@@ -92,6 +120,87 @@ test('returns the shared provider-timeout error contract', async () => {
   assert.equal(response.status, 504);
   assert.equal(payload.code, 'PROVIDER_TIMEOUT');
   assert.equal(ApiErrorSchema.safeParse(payload).success, true);
+});
+
+test('returns the shared request-timeout error contract', async () => {
+  const worker = createWorkerHandler(
+    (_input, signal) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      }),
+    { providerTimeoutMs: 50, requestTimeoutMs: 5 },
+  );
+  const response = await worker.fetch(
+    new Request('https://example.test/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 504);
+  assert.equal(payload.code, 'REQUEST_TIMEOUT');
+  assert.equal(ApiErrorSchema.safeParse(payload).success, true);
+});
+
+test('rate limits hosted API calls with the shared contract', async () => {
+  const worker = createWorkerHandler(undefined, { rateLimitMax: 1 });
+  const createRequest = () =>
+    new Request('https://example.test/api/forecast', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '203.0.113.7' },
+      body: JSON.stringify(requestBody),
+    });
+
+  assert.equal((await worker.fetch(createRequest(), { ASSETS: unusedAssets })).status, 200);
+  const limited = await worker.fetch(createRequest(), { ASSETS: unusedAssets });
+  const payload = await limited.json();
+
+  assert.equal(limited.status, 429);
+  assert.equal(payload.code, 'RATE_LIMITED');
+  assert.equal(ApiErrorSchema.safeParse(payload).success, true);
+});
+
+test('rejects malformed JSON consistently across hosted POST endpoints', async () => {
+  for (const path of ['/api/forecast', '/api/preventive-fix', '/api/generated-tests']) {
+    const response = await createWorkerHandler().fetch(
+      new Request(`https://example.test${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{invalid json',
+      }),
+      { ASSETS: unusedAssets },
+    );
+    const payload = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(payload.code, 'INVALID_REQUEST');
+    assert.equal(ApiErrorSchema.safeParse(payload).success, true);
+  }
+});
+
+test('serves static assets and falls back to the application shell', async () => {
+  const assets = {
+    fetch: async (request) => {
+      const path = new URL(request.url).pathname;
+      if (path === '/assets/app.js') return new Response('asset', { status: 200 });
+      if (path === '/index.html') return new Response('<main>app shell</main>', { status: 200 });
+      return new Response('Not found', { status: 404 });
+    },
+  };
+  const worker = createWorkerHandler();
+
+  const asset = await worker.fetch(new Request('https://example.test/assets/app.js'), {
+    ASSETS: assets,
+  });
+  const shell = await worker.fetch(new Request('https://example.test/review/123'), {
+    ASSETS: assets,
+  });
+
+  assert.equal(await asset.text(), 'asset');
+  assert.equal(await shell.text(), '<main>app shell</main>');
 });
 
 test('serves a validated preventive fix from the dedicated endpoint', async () => {
