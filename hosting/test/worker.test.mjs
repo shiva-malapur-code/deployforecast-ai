@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ApiErrorSchema } from '@deploy-forecast/shared';
+import { ApiErrorSchema, createDemoForecast, PreventiveFixSchema } from '@deploy-forecast/shared';
 import { createWorkerHandler } from '../../dist/server/index.js';
 
 const requestBody = {
@@ -71,4 +71,41 @@ test('returns the shared provider-timeout error contract', async () => {
   assert.equal(response.status, 504);
   assert.equal(payload.code, 'PROVIDER_TIMEOUT');
   assert.equal(ApiErrorSchema.safeParse(payload).success, true);
+});
+
+test('serves a validated preventive fix from the dedicated endpoint', async () => {
+  const forecast = createDemoForecast(requestBody, 'test');
+  const worker = createWorkerHandler();
+  const response = await worker.fetch(
+    new Request('https://example.test/api/preventive-fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...requestBody, forecast }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(PreventiveFixSchema.safeParse(payload).success, true);
+  assert.equal(payload.originalCode, requestBody.code);
+});
+
+test('rejects malformed preventive-fix provider output', async () => {
+  const forecast = createDemoForecast(requestBody, 'test');
+  const worker = createWorkerHandler(undefined, {
+    preventiveFixFactory: async () => ({ improvedCode: requestBody.code }),
+  });
+  const response = await worker.fetch(
+    new Request('https://example.test/api/preventive-fix', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...requestBody, forecast }),
+    }),
+    { ASSETS: unusedAssets },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 502);
+  assert.equal(payload.code, 'INVALID_PROVIDER_RESPONSE');
 });

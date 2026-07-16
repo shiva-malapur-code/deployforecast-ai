@@ -6,7 +6,7 @@ import {
   type ForecastRequest,
 } from '@deploy-forecast/shared';
 
-interface ForecastRequestOptions {
+export interface ForecastRequestOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
 }
@@ -27,11 +27,31 @@ export async function createForecast(
   input: ForecastRequest,
   options: ForecastRequestOptions = {},
 ): Promise<EngineeringForecast> {
+  return requestValidatedApi(
+    '/api/forecast',
+    input,
+    EngineeringForecastSchema,
+    'The forecast service returned an unusable response. Please try again.',
+    options,
+  );
+}
+
+interface RuntimeSchema<T> {
+  safeParse(value: unknown): { success: true; data: T } | { success: false };
+}
+
+export async function requestValidatedApi<T>(
+  path: string,
+  input: unknown,
+  schema: RuntimeSchema<T>,
+  invalidResponseMessage: string,
+  options: ForecastRequestOptions = {},
+): Promise<T> {
   const apiBaseUrl = import.meta.env?.VITE_API_BASE_URL ?? '';
   const fetchImpl = options.fetchImpl ?? fetch;
   let response: Response;
   try {
-    response = await fetchImpl(`${apiBaseUrl}/api/forecast`, {
+    response = await fetchImpl(`${apiBaseUrl}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -67,15 +87,15 @@ export async function createForecast(
     );
   }
 
-  const forecast = EngineeringForecastSchema.safeParse(payload);
-  if (!forecast.success) {
+  const result = schema.safeParse(payload);
+  if (!result.success) {
     throw new ForecastApiError(
-      'The forecast service returned an unusable response. Please try again.',
+      invalidResponseMessage,
       'INVALID_PROVIDER_RESPONSE',
       true,
       response.headers.get('X-Request-ID') ?? undefined,
     );
   }
 
-  return forecast.data;
+  return result.data;
 }

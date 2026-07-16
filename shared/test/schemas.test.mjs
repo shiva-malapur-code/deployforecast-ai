@@ -4,8 +4,11 @@ import {
   ApiErrorSchema,
   createApiError,
   createDemoForecast,
+  createDemoPreventiveFix,
   EngineeringForecastSchema,
   ForecastRequestSchema,
+  PreventiveFixSchema,
+  validatePreventiveFixEvidence,
 } from '../dist/index.js';
 
 const validRequest = {
@@ -62,4 +65,18 @@ test('creates a provider-safe structured API error', () => {
   assert.equal(ApiErrorSchema.safeParse(error).success, true);
   assert.equal(error.recoverable, true);
   assert.equal(error.requestId, 'request-123');
+});
+
+test('creates an evidence-linked preventive fix while preserving original code', () => {
+  const request = {
+    ...validRequest,
+    code: 'export function Clear() { return <div onClick={() => clear()}>Clear</div>; }',
+  };
+  const input = { ...request, forecast: createDemoForecast(request, 'test') };
+  const fix = createDemoPreventiveFix(input, 'test');
+
+  assert.equal(PreventiveFixSchema.safeParse(fix).success, true);
+  assert.equal(fix.originalCode, request.code);
+  assert.notEqual(fix.improvedCode, request.code);
+  assert.equal(validatePreventiveFixEvidence(fix, input), true);
 });

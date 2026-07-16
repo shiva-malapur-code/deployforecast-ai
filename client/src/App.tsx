@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { Brand } from '@/components/brand';
 import { CodeEditor } from '@/components/code-editor';
-import { ForecastDashboard } from '@/components/forecast-dashboard';
+import { ForecastResults } from '@/components/forecast-results';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sampleCode } from '@/data/sample-code';
@@ -286,9 +286,10 @@ export default function App() {
                   </div>
                 </Card>
               ) : submission ? (
-                <ForecastDashboard
-                  forecast={submission.forecast}
-                  onDownload={() =>
+                <ForecastResults
+                  key={submission.forecast.id}
+                  submission={submission}
+                  onDownloadReport={() =>
                     downloadForecastReport(
                       submission.forecast,
                       submission.request.code,

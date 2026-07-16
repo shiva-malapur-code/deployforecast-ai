@@ -2,10 +2,16 @@ import {
   API_ERROR_DEFINITIONS,
   createApiError,
   createDemoForecast,
+  createDemoPreventiveFix,
   EngineeringForecastSchema,
   ForecastRequestSchema,
+  PreventiveFixRequestSchema,
+  PreventiveFixSchema,
+  validatePreventiveFixEvidence,
   type EngineeringForecast,
   type ForecastRequest,
+  type PreventiveFix,
+  type PreventiveFixRequest,
 } from '@deploy-forecast/shared';
 
 interface Environment {
@@ -17,15 +23,23 @@ type HostedForecastFactory = (
   signal?: AbortSignal,
 ) => EngineeringForecast | Promise<EngineeringForecast>;
 
+type HostedPreventiveFixFactory = (
+  input: PreventiveFixRequest,
+  signal?: AbortSignal,
+) => PreventiveFix | Promise<PreventiveFix>;
+
 interface WorkerOptions {
   requestTimeoutMs?: number;
   providerTimeoutMs?: number;
   rateLimitWindowMs?: number;
   rateLimitMax?: number;
+  preventiveFixFactory?: HostedPreventiveFixFactory;
 }
 
 const publicDemoForecast: HostedForecastFactory = (input) =>
   createDemoForecast(input, 'public-demo');
+const publicDemoPreventiveFix: HostedPreventiveFixFactory = (input) =>
+  createDemoPreventiveFix(input, 'public-demo');
 
 function errorResponse(
   code: keyof typeof API_ERROR_DEFINITIONS,
@@ -46,7 +60,22 @@ export function createWorkerHandler(
   const providerTimeoutMs = options.providerTimeoutMs ?? 15_000;
   const rateLimitWindowMs = options.rateLimitWindowMs ?? 60_000;
   const rateLimitMax = options.rateLimitMax ?? 20;
+  const preventiveFixFactory = options.preventiveFixFactory ?? publicDemoPreventiveFix;
   const clients = new Map<string, { count: number; resetAt: number }>();
+
+  const exceedsRateLimit = (request: Request) => {
+    const clientKey =
+      request.headers.get('CF-Connecting-IP') ??
+      request.headers.get('X-Forwarded-For') ??
+      'unknown';
+    const now = Date.now();
+    const current = clients.get(clientKey);
+    const rate =
+      !current || current.resetAt <= now ? { count: 0, resetAt: now + rateLimitWindowMs } : current;
+    rate.count += 1;
+    clients.set(clientKey, rate);
+    return rate.count > rateLimitMax;
+  };
 
   return {
     async fetch(request: Request, env: Environment): Promise<Response> {
@@ -58,19 +87,7 @@ export function createWorkerHandler(
       }
 
       if (url.pathname === '/api/forecast' && request.method === 'POST') {
-        const clientKey =
-          request.headers.get('CF-Connecting-IP') ??
-          request.headers.get('X-Forwarded-For') ??
-          'unknown';
-        const now = Date.now();
-        const current = clients.get(clientKey);
-        const rate =
-          !current || current.resetAt <= now
-            ? { count: 0, resetAt: now + rateLimitWindowMs }
-            : current;
-        rate.count += 1;
-        clients.set(clientKey, rate);
-        if (rate.count > rateLimitMax) {
+        if (exceedsRateLimit(request)) {
           return errorResponse('RATE_LIMITED', requestId);
         }
 
@@ -110,6 +127,49 @@ export function createWorkerHandler(
         }
       }
 
+      if (url.pathname === '/api/preventive-fix' && request.method === 'POST') {
+        if (exceedsRateLimit(request)) return errorResponse('RATE_LIMITED', requestId);
+
+        let body: unknown;
+        try {
+          body = await request.json();
+        } catch {
+          return errorResponse('INVALID_REQUEST', requestId);
+        }
+
+        const input = PreventiveFixRequestSchema.safeParse(body);
+        if (!input.success) {
+          return errorResponse('INVALID_REQUEST', requestId, input.error.flatten());
+        }
+
+        try {
+          const fix = PreventiveFixSchema.parse(
+            await executeHostedOperation((signal) => preventiveFixFactory(input.data, signal), {
+              requestTimeoutMs,
+              providerTimeoutMs,
+            }),
+          );
+          if (!validatePreventiveFixEvidence(fix, input.data)) {
+            console.error(`[${requestId}] InvalidProviderResponse`);
+            return errorResponse('INVALID_PROVIDER_RESPONSE', requestId);
+          }
+          return Response.json(fix, { headers: { 'X-Request-ID': requestId } });
+        } catch (error) {
+          if (error instanceof HostedProviderTimeoutError) {
+            return errorResponse('PROVIDER_TIMEOUT', requestId);
+          }
+          if (error instanceof HostedRequestTimeoutError) {
+            return errorResponse('REQUEST_TIMEOUT', requestId);
+          }
+          if (error instanceof Error && error.name === 'ZodError') {
+            console.error(`[${requestId}] InvalidProviderResponse`);
+            return errorResponse('INVALID_PROVIDER_RESPONSE', requestId);
+          }
+          console.error(`[${requestId}] HostedPreventiveFixError`);
+          return errorResponse('INTERNAL_ERROR', requestId);
+        }
+      }
+
       const assetResponse = await env.ASSETS.fetch(request);
       if (assetResponse.status !== 404) return assetResponse;
 
@@ -124,6 +184,13 @@ class HostedProviderTimeoutError extends Error {}
 async function executeHostedForecast(
   forecastFactory: HostedForecastFactory,
   input: ForecastRequest,
+  options: Required<Pick<WorkerOptions, 'requestTimeoutMs' | 'providerTimeoutMs'>>,
+) {
+  return executeHostedOperation((signal) => forecastFactory(input, signal), options);
+}
+
+async function executeHostedOperation<T>(
+  operation: (signal: AbortSignal) => T | Promise<T>,
   options: Required<Pick<WorkerOptions, 'requestTimeoutMs' | 'providerTimeoutMs'>>,
 ) {
   const controller = new AbortController();
@@ -145,11 +212,7 @@ async function executeHostedForecast(
   });
 
   try {
-    return await Promise.race([
-      forecastFactory(input, controller.signal),
-      requestTimeout,
-      providerTimeout,
-    ]);
+    return await Promise.race([operation(controller.signal), requestTimeout, providerTimeout]);
   } finally {
     clearTimeout(requestTimer);
     clearTimeout(providerTimer);

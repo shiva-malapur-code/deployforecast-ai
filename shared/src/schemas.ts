@@ -62,6 +62,49 @@ export const EngineeringForecastSchema = z.object({
   disclaimer: z.string().min(1),
 });
 
+export const PreventiveFixRequestSchema = z.object({
+  code: ForecastRequestSchema.shape.code,
+  language: ForecastRequestSchema.shape.language,
+  framework: ForecastRequestSchema.shape.framework,
+  forecast: EngineeringForecastSchema,
+});
+
+export const PreventiveFixChangeSchema = z.object({
+  riskId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1),
+  title: z.string().min(1),
+  explanation: z.string().min(1),
+});
+
+export const PreventiveFixSchema = z.object({
+  id: z.string().min(1),
+  generatedAt: z.string().datetime(),
+  provider: z.string().min(1),
+  originalCode: z.string().min(20).max(50_000),
+  improvedCode: z.string().min(20).max(50_000),
+  summary: z.string().min(1),
+  changes: z.array(PreventiveFixChangeSchema),
+  reviewWarning: z.string().min(1),
+});
+
+export function validatePreventiveFixEvidence(
+  fix: z.infer<typeof PreventiveFixSchema>,
+  input: z.infer<typeof PreventiveFixRequestSchema>,
+): boolean {
+  if (fix.originalCode !== input.code) return false;
+  return fix.changes.every((change) => {
+    const risk = input.forecast.risks.find((item) => item.id === change.riskId);
+    return (
+      risk !== undefined &&
+      change.signalIds.every(
+        (signalId) =>
+          risk.signalIds.includes(signalId) &&
+          input.forecast.signals.some((signal) => signal.id === signalId),
+      )
+    );
+  });
+}
+
 export const ApiErrorCodeSchema = z.enum([
   'INVALID_REQUEST',
   'RATE_LIMITED',
@@ -151,5 +194,8 @@ export type ForecastSignal = z.infer<typeof ForecastSignalSchema>;
 export type ForecastRisk = z.infer<typeof ForecastRiskSchema>;
 export type ForecastScores = z.infer<typeof ForecastScoresSchema>;
 export type EngineeringForecast = z.infer<typeof EngineeringForecastSchema>;
+export type PreventiveFixRequest = z.infer<typeof PreventiveFixRequestSchema>;
+export type PreventiveFixChange = z.infer<typeof PreventiveFixChangeSchema>;
+export type PreventiveFix = z.infer<typeof PreventiveFixSchema>;
 export type ApiErrorCode = z.infer<typeof ApiErrorCodeSchema>;
 export type ApiError = z.infer<typeof ApiErrorSchema>;

@@ -14,9 +14,19 @@ export interface MonacoEditorInstance {
   setValue(value: string): void;
 }
 
+export interface MonacoDiffEditorInstance {
+  dispose(): void;
+  layout(): void;
+  setModel(model: { original: MonacoModel; modified: MonacoModel }): void;
+}
+
 interface MonacoApi {
   editor: {
     create(element: HTMLElement, options: Record<string, unknown>): MonacoEditorInstance;
+    createDiffEditor(
+      element: HTMLElement,
+      options: Record<string, unknown>,
+    ): MonacoDiffEditorInstance;
     createModel(value: string, language: string): MonacoModel;
     defineTheme(name: string, theme: Record<string, unknown>): void;
     setModelLanguage(model: MonacoModel, language: string): void;

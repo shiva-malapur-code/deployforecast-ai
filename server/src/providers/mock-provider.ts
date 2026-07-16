@@ -1,6 +1,11 @@
-import { createDemoForecast, type ForecastRequest } from '@deploy-forecast/shared';
+import {
+  createDemoForecast,
+  createDemoPreventiveFix,
+  type ForecastRequest,
+  type PreventiveFixRequest,
+} from '@deploy-forecast/shared';
 import type { AIProvider } from './ai-provider.js';
-import { parseProviderForecast } from './provider-output.js';
+import { parseProviderForecast, parseProviderPreventiveFix } from './provider-output.js';
 
 export class MockProvider implements AIProvider {
   readonly name = 'mock';
@@ -8,6 +13,11 @@ export class MockProvider implements AIProvider {
   async forecast(input: ForecastRequest, signal?: AbortSignal) {
     await abortableDelay(700, signal);
     return parseProviderForecast(createDemoForecast(input, this.name), this.name);
+  }
+
+  async generatePreventiveFix(input: PreventiveFixRequest, signal?: AbortSignal) {
+    await abortableDelay(500, signal);
+    return parseProviderPreventiveFix(createDemoPreventiveFix(input, this.name), this.name, input);
   }
 }
 

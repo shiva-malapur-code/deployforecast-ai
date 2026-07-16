@@ -1,20 +1,34 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { createDemoForecast } from '@deploy-forecast/shared';
 import { OllamaProvider } from '../dist/providers/ollama-provider.js';
+
+const request = {
+  code: 'export function Button() { return <button>Save</button>; }',
+  language: 'typescript',
+  framework: 'react',
+};
 
 test('returns a controlled error for malformed Ollama output', async () => {
   const provider = new OllamaProvider(async () => Response.json({ response: '{not valid json' }));
 
+  await assert.rejects(provider.forecast(request), (error) => {
+    assert.equal(error.name, 'ProviderOutputError');
+    assert.equal(error.message, 'AI provider returned an invalid response.');
+    return true;
+  });
+});
+
+test('rejects invalid preventive-fix provider output', async () => {
+  const provider = new OllamaProvider(async () =>
+    Response.json({ response: JSON.stringify({ improvedCode: request.code }) }),
+  );
+
   await assert.rejects(
-    provider.forecast({
-      code: 'export function Button() { return <button>Save</button>; }',
-      language: 'typescript',
-      framework: 'react',
+    provider.generatePreventiveFix({
+      ...request,
+      forecast: createDemoForecast(request, 'test'),
     }),
-    (error) => {
-      assert.equal(error.name, 'ProviderOutputError');
-      assert.equal(error.message, 'AI provider returned an invalid forecast.');
-      return true;
-    },
+    { name: 'ProviderOutputError' },
   );
 });
