@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ForecastRequest } from '@deploy-forecast/shared';
 import {
   ArrowDown,
   ArrowRight,
@@ -10,7 +11,7 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import { Brand } from '@/components/brand';
-import { CodeEditorPlaceholder } from '@/components/code-editor-placeholder';
+import { CodeEditor } from '@/components/code-editor';
 import { ForecastDashboard } from '@/components/forecast-dashboard';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -26,6 +27,7 @@ const scenarioSuggestions = [
 
 export default function App() {
   const [code, setCode] = useState(sampleCode);
+  const [language, setLanguage] = useState<ForecastRequest['language']>('typescript');
   const [submission, setSubmission] = useState<ForecastSubmission | null>(null);
   const [scenario, setScenario] = useState('Traffic grows 10×');
   const [loading, setLoading] = useState(false);
@@ -40,7 +42,7 @@ export default function App() {
       setSubmission(
         await submitForecast({
           code,
-          language: 'typescript',
+          language,
           framework: 'react',
           scenario: scenario.trim() || undefined,
         }),
@@ -163,7 +165,11 @@ export default function App() {
                   observable evidence in the code.
                 </p>
               </div>
-              <Button onClick={runForecast} disabled={loading || code.trim().length < 20} size="lg">
+              <Button
+                onClick={runForecast}
+                disabled={loading || code.trim().length < 20 || code.length > 50_000}
+                size="lg"
+              >
                 {loading ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
@@ -217,7 +223,13 @@ export default function App() {
             )}
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,.95fr)]">
-              <CodeEditorPlaceholder code={code} onChange={setCode} />
+              <CodeEditor
+                code={code}
+                language={language}
+                sampleCode={sampleCode}
+                onChange={setCode}
+                onLanguageChange={setLanguage}
+              />
               {submission ? (
                 <ForecastDashboard
                   forecast={submission.forecast}
