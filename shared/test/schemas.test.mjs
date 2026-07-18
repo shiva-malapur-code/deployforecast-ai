@@ -94,6 +94,27 @@ test('creates an evidence-linked preventive fix while preserving original code',
   assert.equal(validatePreventiveFixEvidence(fix, input), true);
 });
 
+test('bounds an evidenced query effect so preventive verification can close the loop risk', () => {
+  const request = {
+    ...validRequest,
+    code: `import { useEffect, useState } from 'react';
+export function Search() {
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    fetch(\`/api/items?q=\${query}\`).then((response) => response.json()).then(setItems);
+  });
+  return <input aria-label="Search" value={query} onChange={(event) => setQuery(event.target.value)} />;
+}`,
+  };
+  const input = { ...request, forecast: createDemoForecast(request, 'test') };
+  const fix = createDemoPreventiveFix(input, 'test');
+
+  assert.match(fix.improvedCode, /}, \[query\]\);/);
+  assert.ok(fix.changes.some((change) => change.riskId.startsWith('risk-effect-loop')));
+  assert.equal(validatePreventiveFixEvidence(fix, input), true);
+});
+
 test('creates a validated generated test suite linked to forecast evidence', () => {
   const request = {
     ...validRequest,

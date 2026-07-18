@@ -19,10 +19,30 @@ test('renders the security score and purpose-built empty forecast states', () =>
   );
 
   assert.match(markup, />Security</);
+  assert.match(markup, /Why this confidence/);
+  assert.match(markup, /Confidence describes evidence quality/);
+  assert.match(markup, /Known limitations/);
   assert.match(markup, /No priority risks were detected/);
   assert.match(markup, /No inspector findings matched/);
   assert.match(markup, /No preventive actions are required/);
   assert.match(markup, /No risks are forecast for this horizon/);
+});
+
+test('clearly discloses the deterministic public demo provider', () => {
+  const forecast = createDemoForecast(
+    {
+      code: 'export function Button() { return <button>Save</button>; }',
+      language: 'typescript',
+      framework: 'react',
+    },
+    'public-demo',
+  );
+  const markup = renderToStaticMarkup(
+    <ForecastDashboard forecast={forecast} onDownload={() => undefined} />,
+  );
+
+  assert.match(markup, /Public demo · deterministic inspection/);
+  assert.match(markup, /does not claim model-based prediction certainty/);
 });
 
 test('labels scenario results and exposes baseline restoration with comparison notes', () => {

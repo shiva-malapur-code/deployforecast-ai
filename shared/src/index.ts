@@ -7,6 +7,7 @@ export {
   normalizeRiskTitle,
   validateScenarioForecast,
 } from './scenario-comparison.js';
+export { compareForecastVersions } from './verification-comparison.js';
 export {
   API_ERROR_DEFINITIONS,
   ApiErrorCodeSchema,
@@ -57,3 +58,8 @@ export type {
   ScenarioForecast,
   ScenarioRiskComparison,
 } from './schemas.js';
+export type {
+  ForecastVerification,
+  VerificationRiskComparison,
+  VerificationStatus,
+} from './verification-comparison.js';

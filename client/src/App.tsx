@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowRight,
   CloudSun,
+  Code2,
   FlaskConical,
   LoaderCircle,
   Radar,
@@ -16,6 +17,7 @@ import { ForecastResults } from '@/components/forecast-results';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { sampleCode } from '@/data/sample-code';
+import { demoCases, type DemoCase } from '@/data/demo-cases';
 import { createForecast, ForecastApiError } from '@/services/forecast-api';
 import { ForecastRequestManager } from '@/services/forecast-request-manager';
 import type { ForecastSubmission } from '@/services/forecast-submission';
@@ -39,6 +41,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<{ message: string; recoverable: boolean } | null>(null);
   const [retryRequest, setRetryRequest] = useState<Readonly<ForecastRequest> | null>(null);
+  const [activeDemoId, setActiveDemoId] = useState('search-traffic');
 
   useEffect(() => () => requestManagerRef.current?.abort(), []);
 
@@ -78,6 +81,18 @@ export default function App() {
     } finally {
       setLoading(requestManager.isRunning);
     }
+  }
+
+  function loadDemoCase(demo: DemoCase) {
+    requestManagerRef.current?.abort();
+    setLoading(false);
+    setSubmission(null);
+    setError(null);
+    setRetryRequest(null);
+    setActiveDemoId(demo.id);
+    setCode(demo.code);
+    setLanguage(demo.language);
+    setScenario(demo.scenario);
   }
 
   return (
@@ -208,6 +223,42 @@ export default function App() {
                 {loading ? 'Reading the signals…' : 'Forecast deployment'}
               </Button>
             </div>
+
+            <Card className="mb-5 overflow-hidden">
+              <div className="border-b border-border bg-primary/[0.025] px-4 py-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                  <Code2 className="size-4 text-primary" /> Judge mode
+                </div>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Load a complete forecast story with code and a production scenario.
+                </p>
+              </div>
+              <div className="grid gap-2 p-3 md:grid-cols-3">
+                {demoCases.map((demo) => (
+                  <button
+                    key={demo.id}
+                    type="button"
+                    aria-pressed={activeDemoId === demo.id}
+                    onClick={() => loadDemoCase(demo)}
+                    className={`rounded-lg border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      activeDemoId === demo.id
+                        ? 'border-primary/35 bg-primary/[0.07]'
+                        : 'border-border bg-black/10 hover:border-white/20'
+                    }`}
+                  >
+                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-primary">
+                      {demo.label}
+                    </span>
+                    <span className="mt-1 block text-sm font-semibold text-white">
+                      {demo.title}
+                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                      {demo.description}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </Card>
 
             <Card className="mb-5 p-4">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-center">

@@ -11,6 +11,7 @@ import type {
 import {
   ArrowRight,
   CheckCircle2,
+  CircleHelp,
   ChevronDown,
   Clock3,
   Download,
@@ -218,6 +219,8 @@ export function ForecastDashboard({
         </div>
       </Card>
 
+      <ForecastTrustPanel forecast={activeForecast} provider={forecast.provider} />
+
       <ForecastTimeline forecast={activeForecast} />
 
       <Card className="p-4">
@@ -340,6 +343,104 @@ export function ForecastDashboard({
       <p className="px-2 text-xs leading-5 text-muted-foreground">{activeForecast.disclaimer}</p>
     </div>
   );
+}
+
+function ForecastTrustPanel({
+  forecast,
+  provider,
+}: {
+  forecast: ForecastSnapshot;
+  provider: string;
+}) {
+  const confidence = getOverallConfidence(forecast);
+  const confidenceCounts = forecast.risks.reduce(
+    (counts, risk) => ({ ...counts, [risk.confidence]: counts[risk.confidence] + 1 }),
+    { low: 0, medium: 0, high: 0 },
+  );
+  const linkedSignalIds = new Set(forecast.risks.flatMap((risk) => risk.signalIds));
+  const linkedEvidenceCount = forecast.signals.filter((signal) =>
+    linkedSignalIds.has(signal.id),
+  ).length;
+  const providerDisclosure = getProviderDisclosure(provider);
+
+  return (
+    <Card className="overflow-hidden">
+      <div className="flex items-start gap-3 border-b border-border px-5 py-4">
+        <span className="mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border border-primary/20 bg-primary/[0.07] text-primary">
+          <CircleHelp className="size-4" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
+            Why this confidence?
+          </p>
+          <p className="mt-1 text-xs leading-5 text-muted-foreground">
+            Confidence describes evidence quality—not the probability that an incident will occur.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-3 p-5 sm:grid-cols-3">
+        <TrustMetric label="Overall confidence" value={confidence} />
+        <TrustMetric
+          label="Linked evidence"
+          value={`${linkedEvidenceCount}/${forecast.signals.length} signals`}
+        />
+        <TrustMetric
+          label="Risk confidence"
+          value={`${confidenceCounts.high} high · ${confidenceCounts.medium} medium · ${confidenceCounts.low} low`}
+        />
+      </div>
+
+      <div className="grid gap-3 border-t border-border p-5 sm:grid-cols-2">
+        <div className="rounded-lg border border-border bg-black/10 p-4">
+          <p className="text-xs font-semibold text-white">{providerDisclosure.title}</p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            {providerDisclosure.description}
+          </p>
+        </div>
+        <div className="rounded-lg border border-border bg-black/10 p-4">
+          <p className="text-xs font-semibold text-white">Known limitations</p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            Static source inspection cannot observe real traffic, latency, infrastructure, browser
+            mix, or user behavior. Validate important forecasts with runtime telemetry and tests.
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TrustMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-white/[0.015] p-3">
+      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p className="mt-2 text-sm font-semibold capitalize text-white">{value}</p>
+    </div>
+  );
+}
+
+function getProviderDisclosure(provider: string): { title: string; description: string } {
+  if (provider === 'public-demo') {
+    return {
+      title: 'Public demo · deterministic inspection',
+      description:
+        'This hosted demo uses transparent static rules and validated structured responses. It does not claim model-based prediction certainty.',
+    };
+  }
+  if (provider.startsWith('ollama:')) {
+    return {
+      title: 'Local AI · Ollama',
+      description:
+        'The configured local model produced this forecast, and its response passed the same shared runtime validation as the public demo.',
+    };
+  }
+  return {
+    title: 'Validated forecast provider',
+    description:
+      'The provider response passed the shared engineering forecast schema before it reached this dashboard.',
+  };
 }
 
 const comparisonStyle: Record<ScenarioComparisonStatus, string> = {

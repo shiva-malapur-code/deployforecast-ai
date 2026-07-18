@@ -11,6 +11,10 @@ test('renders the landing page, forecast workspace, scenario control, and primar
 
   assert.match(markup, /Can your app survive production/);
   assert.match(markup, /Run the engineering forecast/);
+  assert.match(markup, /Judge mode/);
+  assert.match(markup, /Search under traffic growth/);
+  assert.match(markup, /Product list at 100k items/);
+  assert.match(markup, /Checkout with a slow dependency/);
   assert.match(markup, /Deployment scenario/);
   assert.match(markup, /Traffic grows 10×/);
   assert.match(markup, /Forecast deployment/);

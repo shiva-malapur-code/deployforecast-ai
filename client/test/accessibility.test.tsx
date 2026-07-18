@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import axe from 'axe-core';
 import { JSDOM } from 'jsdom';
-import { createDemoForecast } from '@deploy-forecast/shared';
+import { compareForecastVersions, createDemoForecast } from '@deploy-forecast/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
 import App from '../src/App.tsx';
 import { ForecastDashboard } from '../src/components/forecast-dashboard.tsx';
+import { VerificationPanel } from '../src/components/forecast-results.tsx';
 
 async function seriousAxeViolations(markup: string) {
   const dom = new JSDOM(
@@ -49,6 +50,39 @@ test('scenario comparison dashboard has no serious axe violations', async () => 
   const markup = renderToStaticMarkup(
     <main>
       <ForecastDashboard forecast={forecast} onDownload={() => undefined} />
+    </main>,
+  );
+  const violations = await seriousAxeViolations(markup);
+
+  assert.equal(
+    violations.length,
+    0,
+    JSON.stringify(
+      violations.map(({ id, impact, nodes }) => ({ id, impact, nodes: nodes.length })),
+    ),
+  );
+});
+
+test('Prevent and Verify comparison has no serious axe violations', async () => {
+  const before = createDemoForecast(
+    {
+      code: 'export function Clear() { return <div onClick={() => clear()}>Clear</div>; }',
+      language: 'typescript',
+      framework: 'react',
+    },
+    'test',
+  );
+  const after = createDemoForecast(
+    {
+      code: 'export function Clear() { return <button onClick={() => clear()}>Clear</button>; }',
+      language: 'typescript',
+      framework: 'react',
+    },
+    'test',
+  );
+  const markup = renderToStaticMarkup(
+    <main>
+      <VerificationPanel verification={compareForecastVersions(before, after)} />
     </main>,
   );
   const violations = await seriousAxeViolations(markup);

@@ -4,10 +4,15 @@ import test from 'node:test';
 import {
   createDemoForecast,
   createDemoPreventiveFix,
+  compareForecastVersions,
   type ForecastRequest,
 } from '@deploy-forecast/shared';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ForecastResults, ImprovedCodePanel } from '../src/components/forecast-results.tsx';
+import {
+  ForecastResults,
+  ImprovedCodePanel,
+  VerificationPanel,
+} from '../src/components/forecast-results.tsx';
 import { getPreventiveFixFilename } from '../src/utils/preventive-fix-download.ts';
 
 const request: ForecastRequest = {
@@ -53,4 +58,36 @@ test('renders the preventive fix diff panel and review controls', () => {
 test('uses a predictable download filename for the selected language', () => {
   assert.equal(getPreventiveFixFilename('typescript'), 'deployforecast-preventive-fix.tsx');
   assert.equal(getPreventiveFixFilename('javascript'), 'deployforecast-preventive-fix.jsx');
+});
+
+test('renders the Prevent and Verify action after a preventive fix is generated', () => {
+  const markup = renderToStaticMarkup(
+    <ImprovedCodePanel
+      fix={fix}
+      language="typescript"
+      loading={false}
+      error={null}
+      onGenerate={() => undefined}
+      originalForecast={forecast}
+      verification={null}
+      verificationLoading={false}
+      verificationError={null}
+      onVerify={() => undefined}
+    />,
+  );
+
+  assert.match(markup, /Re-forecast improved code/);
+  assert.doesNotMatch(markup, /Improved code re-forecast complete/);
+});
+
+test('renders measured before-and-after forecast verification results', () => {
+  const verifiedForecast = createDemoForecast({ ...request, code: fix.improvedCode }, 'test');
+  const verification = compareForecastVersions(forecast, verifiedForecast);
+  const markup = renderToStaticMarkup(<VerificationPanel verification={verification} />);
+
+  assert.match(markup, /Prevent &amp; Verify/);
+  assert.match(markup, /Improved code re-forecast complete/);
+  assert.match(markup, /not estimated performance claims/);
+  assert.match(markup, /resolved/);
+  assert.match(markup, /removed/);
 });

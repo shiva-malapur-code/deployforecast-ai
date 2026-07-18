@@ -34,6 +34,19 @@ export function createDemoPreventiveFix(
   };
 
   applyEvidenceFix(
+    'signal-effect-loop',
+    'Bound the search effect to query changes',
+    'Adds the query dependency only when the forecasted effect visibly reads the query state value.',
+    (code) => {
+      if (!/const\s*\[\s*query\s*,/.test(code)) return code;
+      return code.replace(
+        /useEffect\s*\(\s*\(\s*\)\s*=>\s*\{([\s\S]*?\$\{query\}[\s\S]*?)\}\s*\)\s*;/,
+        'useEffect(() => {$1}, [query]);',
+      );
+    },
+  );
+
+  applyEvidenceFix(
     'signal-unstable-key',
     'Use stable list identity',
     'Replaces the forecast-evidenced random React key with the existing item identifier.',
