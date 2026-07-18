@@ -2,7 +2,7 @@
 
 DeployForecast AI is an AI Engineering Forecast workflow that turns source-code signals into a structured, time-based view of likely production risks and preventive actions.
 
-**Live demo:** [https://deployforecast-ai.netlify.app/](https://https://deployforecast-ai.netlify.app/)
+**Live demo:** [https://deployforecast-ai.netlify.app/](https://deployforecast-ai.netlify.app/)
 
 ## Product workflow
 
